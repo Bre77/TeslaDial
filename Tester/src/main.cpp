@@ -1,7 +1,9 @@
 #include <Arduino.h>
-#include <esp_now.h>
-#include <M5Atom.h>
 #include <WiFi.h>
+#include <esp_now.h>
+#include <M5AtomDisplay.h>
+#include <M5Unified.h>
+
 // 50:02:91:92:94:D8
 
 uint8_t senderAddress[] = {0x50, 0x02, 0x91, 0x92, 0x94, 0xD8};
@@ -44,11 +46,7 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 void setup()
 {
     // put your setup code here, to run once:
-    M5.begin(
-        true,  // SerialEnable
-        false, // I2CEnable
-        true   // DisplayEnable
-    );
+    M5.begin();
     WiFi.mode(WIFI_STA);
     if (esp_now_init() != ESP_OK)
     {
