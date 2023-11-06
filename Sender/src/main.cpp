@@ -116,23 +116,24 @@ void setup()
 
     CAN_cfg.tx_pin_id = GPIO_NUM_22;
     CAN_cfg.rx_pin_id = GPIO_NUM_19;
-    CAN.cfg.
     CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
 
     CAN_filter_t p_filter;
-    p_filter.FM = Single_Mode;
+    p_filter.FM = Dual_Mode;
+    Serial.println(id_speed & 255);
+    Serial.println(id_speed >> 8);
 
     p_filter.ACR0 = (id_speed) & 255;
     p_filter.ACR1 = (id_speed) >> 8;
-    p_filter.ACR2 = 0;
-    p_filter.ACR3 = 0;
+    p_filter.ACR2 = (id_hvac) & 255;
+    p_filter.ACR3 = (id_hvac) >> 8;
 
-    p_filter.AMR0 = (id_speed) & 255;
-    p_filter.AMR1 = (id_speed) >> 8;
+    p_filter.AMR0 = 0;
+    p_filter.AMR1 = 248;
     p_filter.AMR2 = 0;
-    p_filter.AMR3 = 0;
+    p_filter.AMR3 = 248;
 
-    //ESP32Can.CANConfigFilter(&p_filter);
+    // ESP32Can.CANConfigFilter(&p_filter);
     ESP32Can.CANInit();
 
     Serial.println("Started CANBus");
@@ -155,7 +156,7 @@ void loop()
             Serial.printf("HVAC Left: %d Right: %d\n", rx_frame.data.u8[0], rx_frame.data.u8[1]);
             break;
         default:
-            //Serial.printf("WTF is: %d\n", rx_frame.MsgID);
+            // Serial.printf("WTF is: %d\n", rx_frame.MsgID);
             break;
         }
         /*Serial.printf(" from 0x%08X, DLC %d, Data ", rx_frame.MsgID, rx_frame.FIR.B.DLC);
@@ -183,7 +184,7 @@ void loop()
     }
     else
     {
-        Serial.println("Nothing");
+        // Serial.println("Nothing");
     }
 
     rx_queue_count = uxQueueSpacesAvailable(CAN_cfg.rx_queue);
