@@ -9,45 +9,56 @@
 #define NUM_LEDS 1
 #define DATA_PIN 27
 
-CAN_device_t CAN_cfg;           // CAN Config
-const int rx_queue_size = 2048; // Receive Queue size
-int rx_queue_count = 0;
-
 // 50:02:91:92:94:D8
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 esp_now_peer_info_t peerInfo;
 
-typedef struct esp_now_msg
+// ESPNow data structures
+struct espnow_tx
+{
+    int speed;
+    int hvac_left;
+    int hvac_right;
+    int queue;
+} espnow_tx;
+
+struct espnow_rx
 {
     byte id;
     int value;
-} esp_now_msg;
+} espnow_rx;
 
-// Create a struct_message called myData
-esp_now_msg data_send;
-esp_now_msg data_receive;
-
-// CanBus Message
-CAN_frame_t rx_frame;
+// CanBus Memory
+CAN_device_t CAN_cfg;           // CAN Config
+const int rx_queue_size = 1024; // Receive Queue size
+CAN_frame_t can_rx;             // CAN Frame for receiving
+CAN_frame_t can_tx;             // CAN Frame for sending
 
 // CanBus IDs
 const u16_t id_speed = 599;
 const u16_t id_hvac = 755;
+const u16_t id_test = 0;
 
 struct
 {
-    int ignore : 12;
-    int speed : 12;
+    s16_t ignore1 : 12;
+    s16_t speed : 12;
+    // u8_t ignore2 : 8;
 } data_speed;
 
 struct
 {
     u8_t hvac_left : 5;
+    u8_t ignore1 : 3;
     u8_t hvac_right : 5;
+    u8_t ignore2 : 3;
 } data_hvac;
 
 // LEDS
 CRGB leds[NUM_LEDS];
+
+// Timing
+unsigned long next_send = 0;
 
 void led(CRGB color)
 {
@@ -71,13 +82,13 @@ void error(String msg = "Error")
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len)
 {
-    memcpy(&data_receive, data, 4);
+    memcpy(&espnow_rx, data, 3);
     Serial.print("Bytes received: ");
     Serial.println(data_len);
-    Serial.print("Data received: ");
-    Serial.println(data_receive.value);
-    Serial.print("Data received: ");
-    Serial.println(data_receive.id);
+    Serial.print("ID received: ");
+    Serial.println(espnow_rx.id);
+    Serial.print("Value received: ");
+    Serial.println(espnow_rx.value);
 }
 
 void setup()
@@ -113,66 +124,91 @@ void setup()
 
     // CAN Bus
     CAN_cfg.speed = CAN_SPEED_500KBPS;
-
     CAN_cfg.tx_pin_id = GPIO_NUM_22;
     CAN_cfg.rx_pin_id = GPIO_NUM_19;
     CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
 
     CAN_filter_t p_filter;
     p_filter.FM = Dual_Mode;
-    Serial.println(id_speed & 255);
-    Serial.println(id_speed >> 8);
 
-    p_filter.ACR0 = (id_speed) & 255;
-    p_filter.ACR1 = (id_speed) >> 8;
-    p_filter.ACR2 = (id_hvac) & 255;
-    p_filter.ACR3 = (id_hvac) >> 8;
+    u16_t id1 = id_speed & id_hvac;
+    u16_t mask1 = (id_speed & id_hvac) ^ (id_speed | id_hvac);
+    p_filter.ACR0 = id1 >> 3;
+    p_filter.ACR1 = id1 << 5;
+    p_filter.AMR0 = mask1 >> 3;
+    p_filter.AMR1 = (mask1 << 5) + 15;
 
-    p_filter.AMR0 = 0;
-    p_filter.AMR1 = 248;
-    p_filter.AMR2 = 0;
-    p_filter.AMR3 = 248;
+    u16_t id2 = id_test;
+    u16_t mask2 = (id_test) ^ (id_test);
+    p_filter.ACR2 = id2 >> 3;
+    p_filter.ACR3 = id2 << 5;
+    p_filter.AMR2 = mask2 >> 3;
+    p_filter.AMR3 = (mask2 << 5) + 15;
 
-    // ESP32Can.CANConfigFilter(&p_filter);
+    Serial.println("Filter 1");
+    Serial.println(id1);
+    Serial.println(mask1);
+    Serial.println(p_filter.ACR0);
+    Serial.println(p_filter.ACR1);
+    Serial.println(p_filter.AMR0);
+    Serial.println(p_filter.AMR1);
+    Serial.println("");
+    Serial.println("Filter 2");
+    Serial.println(id2);
+    Serial.println(mask2);
+    Serial.println(p_filter.ACR2);
+    Serial.println(p_filter.ACR3);
+    Serial.println(p_filter.AMR2);
+    Serial.println(p_filter.AMR3);
+    Serial.println("");
+
+    ESP32Can.CANConfigFilter(&p_filter);
     ESP32Can.CANInit();
 
     Serial.println("Started CANBus");
 
-    led(CRGB::Black);
+    led(CRGB::Green);
 }
 
 void loop()
 {
     M5.update();
 
-    if (xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 3 * portTICK_PERIOD_MS) == pdTRUE)
+    if (xQueueReceive(CAN_cfg.rx_queue, &can_rx, 3 * portTICK_PERIOD_MS) == pdTRUE)
     {
-        switch (rx_frame.MsgID)
+        Serial.println(can_rx.MsgID);
+        switch (can_rx.MsgID)
         {
         case id_speed:
-            Serial.printf("Speed: %d\n", rx_frame.data.u8[0]);
-            break;
+        {
+            memcpy(&data_speed, can_rx.data.u8, 3);
+            espnow_tx.speed = (data_speed.speed * 0.8) - 400;
+        }
         case id_hvac:
-            Serial.printf("HVAC Left: %d Right: %d\n", rx_frame.data.u8[0], rx_frame.data.u8[1]);
-            break;
-        default:
-            // Serial.printf("WTF is: %d\n", rx_frame.MsgID);
+        {
+            memcpy(&data_hvac, can_rx.data.u8, 2);
+            espnow_tx.hvac_left = (data_hvac.hvac_left * 5) + 150;
+            espnow_tx.hvac_right = (data_hvac.hvac_right * 5) + 150;
             break;
         }
-        /*Serial.printf(" from 0x%08X, DLC %d, Data ", rx_frame.MsgID, rx_frame.FIR.B.DLC);
-            for (int i = 0; i < rx_frame.FIR.B.DLC; i++)
+        default:
+            // Serial.printf("WTF is: %d\n", can_rx.MsgID);
+            break;
+        }
+        /*Serial.printf(" from 0x%08X, DLC %d, Data ", can_rx.MsgID, can_rx.FIR.B.DLC);
+            for (int i = 0; i < can_rx.FIR.B.DLC; i++)
             {
-                Serial.printf("0x%02X ", rx_frame.data.u8[i]);
+                Serial.printf("0x%02X ", can_rx.data.u8[i]);
             }
             Serial.printf("\n");*/
 
-        /*if (rx_frame.data.u8[0] == 0x01) {
+        /*if (can_rx.data.u8[0] == 0x01) {
             CAN_frame_t tx_frame;
             tx_frame.FIR.B.FF   = CAN_frame_std;
             tx_frame.MsgID      = CAN_MSG_ID;
             tx_frame.FIR.B.DLC  = 8;
             tx_frame.data.u8[0] = 0x02;
-            tx_frame.data.u8[1] = rx_frame.data.u8[1];
+            tx_frame.data.u8[1] = can_rx.data.u8[1];
             tx_frame.data.u8[2] = 0x00;
             tx_frame.data.u8[3] = 0x00;
             tx_frame.data.u8[4] = 0x00;
@@ -187,17 +223,20 @@ void loop()
         // Serial.println("Nothing");
     }
 
-    rx_queue_count = uxQueueSpacesAvailable(CAN_cfg.rx_queue);
-    led(CRGB(0, map(rx_queue_count, 0, rx_queue_size, 0, 255), 0));
-
-    /*if (esp_now_send(broadcastAddress, (uint8_t *)&data_send, sizeof(data_send)) == ESP_OK)
+    if (millis() > next_send)
     {
-        leds[0] = CRGB::Blue;
-        FastLED.show();
+        next_send = millis() + 100;
+        espnow_tx.queue = uxQueueMessagesWaiting(CAN_cfg.rx_queue);
+        if (esp_now_send(broadcastAddress, (uint8_t *)&espnow_tx, sizeof(espnow_tx)) != ESP_OK)
+        {
+            Serial.println("Send Failed");
+        }
     }
-    else
+
+    if (M5.BtnA.isPressed())
     {
-        Serial.println("Failed to send");
-    }*/
-    delay(50);
+        led(CRGB::Purple);
+        ESP32Can.CANStop();
+        ESP.restart();
+    }
 }
