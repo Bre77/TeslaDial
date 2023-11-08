@@ -80,6 +80,7 @@ void setup()
     }
     Serial.println("Added sender peer");
 
+    M5Dial.Display.setRotation(3);
     M5Dial.Display.setTextDatum(middle_center);
     M5Dial.Display.setFont(&FreeSansBold12pt7b);
     drawPage();

@@ -29,10 +29,10 @@ struct espnow_rx
 } espnow_rx;
 
 // CanBus Memory
-CAN_device_t CAN_cfg;           // CAN Config
-const int rx_queue_size = 1024; // Receive Queue size
-CAN_frame_t can_rx;             // CAN Frame for receiving
-CAN_frame_t can_tx;             // CAN Frame for sending
+CAN_device_t CAN_cfg;          // CAN Config
+const int rx_queue_size = 256; // Receive Queue size
+CAN_frame_t can_rx;            // CAN Frame for receiving
+CAN_frame_t can_tx;            // CAN Frame for sending
 
 // CanBus IDs
 const u16_t id_speed = 599;
@@ -69,6 +69,7 @@ void led(CRGB color)
 void error(String msg = "Error")
 {
     Serial.println(msg);
+    ESP32Can.CANStop();
     for (int i = 0; i < 50; i++)
     {
         led(CRGB::Red);
@@ -80,9 +81,11 @@ void error(String msg = "Error")
     ESP.restart();
 }
 
+bool send = false;
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len)
 {
     memcpy(&espnow_rx, data, 3);
+    send = true;
     Serial.print("Bytes received: ");
     Serial.println(data_len);
     Serial.print("ID received: ");
@@ -131,15 +134,19 @@ void setup()
     CAN_filter_t p_filter;
     p_filter.FM = Dual_Mode;
 
-    u16_t id1 = id_speed & id_hvac;
-    u16_t mask1 = (id_speed & id_hvac) ^ (id_speed | id_hvac);
+    ESP32Can.CANInit();
+    ESP32Can.CANConfigFilter(&p_filter);
+    delay(1000);
+
+    u16_t id1 = id_speed;
+    u16_t mask1 = (id_speed) ^ (id_speed);
     p_filter.ACR0 = id1 >> 3;
     p_filter.ACR1 = id1 << 5;
     p_filter.AMR0 = mask1 >> 3;
     p_filter.AMR1 = (mask1 << 5) + 15;
 
-    u16_t id2 = id_test;
-    u16_t mask2 = (id_test) ^ (id_test);
+    u16_t id2 = id_hvac;
+    u16_t mask2 = (id_hvac) ^ (id_hvac);
     p_filter.ACR2 = id2 >> 3;
     p_filter.ACR3 = id2 << 5;
     p_filter.AMR2 = mask2 >> 3;
@@ -163,7 +170,6 @@ void setup()
     Serial.println("");
 
     ESP32Can.CANConfigFilter(&p_filter);
-    ESP32Can.CANInit();
 
     Serial.println("Started CANBus");
 
@@ -176,13 +182,14 @@ void loop()
 
     if (xQueueReceive(CAN_cfg.rx_queue, &can_rx, 3 * portTICK_PERIOD_MS) == pdTRUE)
     {
-        Serial.println(can_rx.MsgID);
         switch (can_rx.MsgID)
         {
         case id_speed:
         {
             memcpy(&data_speed, can_rx.data.u8, 3);
             espnow_tx.speed = (data_speed.speed * 0.8) - 400;
+            Serial.println(data_speed.speed);
+            Serial.println(espnow_tx.speed);
         }
         case id_hvac:
         {
@@ -195,34 +202,26 @@ void loop()
             // Serial.printf("WTF is: %d\n", can_rx.MsgID);
             break;
         }
-        /*Serial.printf(" from 0x%08X, DLC %d, Data ", can_rx.MsgID, can_rx.FIR.B.DLC);
-            for (int i = 0; i < can_rx.FIR.B.DLC; i++)
-            {
-                Serial.printf("0x%02X ", can_rx.data.u8[i]);
-            }
-            Serial.printf("\n");*/
-
-        /*if (can_rx.data.u8[0] == 0x01) {
-            CAN_frame_t tx_frame;
-            tx_frame.FIR.B.FF   = CAN_frame_std;
-            tx_frame.MsgID      = CAN_MSG_ID;
-            tx_frame.FIR.B.DLC  = 8;
-            tx_frame.data.u8[0] = 0x02;
-            tx_frame.data.u8[1] = can_rx.data.u8[1];
-            tx_frame.data.u8[2] = 0x00;
-            tx_frame.data.u8[3] = 0x00;
-            tx_frame.data.u8[4] = 0x00;
-            tx_frame.data.u8[5] = 0x00;
-            tx_frame.data.u8[6] = 0x00;
-            tx_frame.data.u8[7] = 0x00;
-            ESP32Can.CANWriteFrame(&tx_frame);
-        }*/
     }
     else
     {
         // Serial.println("Nothing");
     }
 
+    if (send)
+    {
+        Serial.println("Sending");
+        Serial.println(espnow_rx.value);
+        Serial.println((espnow_rx.value / 5) - 15);
+        send = false;
+        CAN_frame_t tx_frame;
+        tx_frame.FIR.B.FF = CAN_frame_std;
+        tx_frame.MsgID = id_hvac;
+        tx_frame.FIR.B.DLC = 3;
+        tx_frame.data.u8[0] = ((espnow_rx.value / 5) - 15) << 3;
+        tx_frame.data.u8[1] = ((espnow_rx.value / 5) - 15) << 3;
+        ESP32Can.CANWriteFrame(&tx_frame);
+    }
     if (millis() > next_send)
     {
         next_send = millis() + 100;
