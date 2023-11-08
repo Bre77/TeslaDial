@@ -16,16 +16,18 @@ struct espnow_rx
     int queue;
 } espnow_rx, espnow_old;
 bool render = true;
+long oldPosition = 0;
+int value = 0;
+u8_t page = 0;
+bool connected = false;
 
 // Receive data into the struct and save it to the metrics array
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
     memcpy(&espnow_rx, incomingData, len);
+    render = true;
+    connected = true;
 }
-
-long oldPosition = 0;
-int value = 0;
-u8_t page = 0;
 
 void drawPage()
 {
@@ -83,6 +85,14 @@ void setup()
     M5Dial.Display.setRotation(3);
     M5Dial.Display.setTextDatum(middle_center);
     M5Dial.Display.setFont(&FreeSansBold12pt7b);
+
+    M5Dial.Display.clear();
+    M5Dial.Display.drawString("Connecting...", 120, 120);
+    M5Dial.Display.display();
+    while (!connected)
+        delay(100);
+
+    oldPosition = M5Dial.Encoder.read() / 4;
     drawPage();
 }
 
@@ -102,7 +112,7 @@ void loop()
     }
     if (render)
     {
-        render = false;
+
         M5Dial.Display.setTextSize(4);
         switch (page)
         {
@@ -119,5 +129,6 @@ void loop()
             M5Dial.Display.drawString("  " + String(espnow_rx.queue) + "  ", 120, 120);
             break;
         }
+        render = false;
     }
 }

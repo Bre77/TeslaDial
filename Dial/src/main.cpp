@@ -86,8 +86,8 @@ void setup()
     }
     Serial.println("Added sender peer");
 
-    M5Dial.Display.setRotation(1)
-        M5Dial.Display.setTextDatum(middle_center);
+    M5Dial.Display.setRotation(1);
+    M5Dial.Display.setTextDatum(middle_center);
     M5Dial.Display.setFont(&FreeSansBold12pt7b);
     drawPage();
 }
@@ -123,7 +123,7 @@ void loop()
     }
     if (render)
     {
-        render = false;
+
         M5Dial.Display.setTextSize(4);
         switch (page)
         {
@@ -140,5 +140,6 @@ void loop()
             M5Dial.Display.drawString(String(espnow_rx.queue / 10) + "." + String(espnow_rx.queue % 10), 120, 120);
             break;
         }
+        render = false;
     }
 }
