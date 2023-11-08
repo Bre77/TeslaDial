@@ -4,28 +4,38 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
+#define PAGES 4
+
 uint8_t senderAddress[] = {0x50, 0x02, 0x91, 0x92, 0x94, 0xD8};
 esp_now_peer_info_t peerInfo;
 
-// ESPNow data structures
-struct espnow_rx
-{
-    int speed;
-    int hvac_left;
-    int hvac_right;
-    int queue;
-} espnow_rx, espnow_old;
 bool render = true;
-
-// Receive data into the struct and save it to the metrics array
-void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
-{
-    memcpy(&espnow_rx, incomingData, len);
-}
-
 long oldPosition = 0;
 int value = 0;
 u8_t page = 0;
+// const char titles[PAGES] = {"Speed", "AC Left", "AC Right", "CAN Queue" };
+
+// Receive data into the struct and save it to the metrics array
+void OnDataRecv(const uint8_t *mac, const uint8_t *data, int len)
+{
+    switch (page)
+    {
+        case(0){
+            value = data[3];
+            break;
+        }
+        case(1){
+            value = data[0] >> 3;
+            break;
+        }
+        case(2){
+            value = data[1] >> 3;
+            break;
+        }
+    }
+}
+
+
 
 void drawPage()
 {
@@ -34,24 +44,24 @@ void drawPage()
     switch (page)
     {
     case 0:
-        M5Dial.Display.drawString("Speed", 120, 30);
-        M5Dial.Display.drawString("KM/H", 120, 200);
-        break;
-    case 1:
-        M5Dial.Display.drawString("AC Left", 120, 30);
-        M5Dial.Display.drawString("Celsius", 120, 200);
-        break;
-    case 2:
-        M5Dial.Display.drawString("AC Right", 120, 30);
-        M5Dial.Display.drawString("Celsius", 120, 200);
-        break;
-    case 3:
-        M5Dial.Display.drawString("CAN Queue", 120, 30);
-        M5Dial.Display.drawString("Frames", 120, 200);
-        break;
-    }
+            M5Dial.Display.drawString("Speed", 120, 30);
+            M5Dial.Display.drawString("KM/H", 120, 200);
+            break;
+        case 1:
+            M5Dial.Display.drawString("AC Left", 120, 30);
+            M5Dial.Display.drawString("Celsius", 120, 200);
+            break;
+        case 2:
+            M5Dial.Display.drawString("AC Right", 120, 30);
+            M5Dial.Display.drawString("Celsius", 120, 200);
+            break;
+        case 3:
+            M5Dial.Display.drawString("CAN Queue", 120, 30);
+            M5Dial.Display.drawString("Frames", 120, 200);
+            break;
+        }
 
-    render = true;
+        render = true;
 }
 
 void setup()
@@ -62,11 +72,7 @@ void setup()
 
     WiFi.mode(WIFI_STA);
     if (esp_now_init() != ESP_OK)
-    {
-        Serial.println("Failed to start ESPNow");
-        return;
-    }
-    Serial.println("Started ESPNow");
+        ESP.restart();
 
     esp_now_register_recv_cb(OnDataRecv);
 
@@ -86,8 +92,6 @@ void setup()
     drawPage();
 }
 
-static uint8_t pages = 4;
-
 void loop()
 {
     M5Dial.update();
@@ -95,7 +99,7 @@ void loop()
     s8_t change = newPosition - oldPosition;
     if (change != 0)
     {
-        page = (pages + page + change) % pages;
+        page = (PAGES + page + change) % PAGES;
         Serial.println(page);
         oldPosition = newPosition;
         drawPage();
