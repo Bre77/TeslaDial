@@ -186,19 +186,8 @@ void loop()
         {
         case id_speed:
         {
-            // memcpy(&data_speed, can_rx.data.u8, 3);
-            int speed1 = (can_rx.data.u8[1] & 0x0F) + (can_rx.data.u8[2] << 8);
-            int speed2 = (can_rx.data.u8[1] & 0x0F) << 8 + can_rx.data.u8[2];
-            Serial.println("RECIEVED");
-            Serial.println(can_rx.data.u8[0]);
-            Serial.println(can_rx.data.u8[1]);
-            Serial.println(can_rx.data.u8[2]);
-            Serial.println(speed1);
-            Serial.println(speed1 * 0.8 - 400);
-            Serial.println(speed2);
-            Serial.println(speed2 * 0.8 - 400);
-
-            espnow_tx.speed = (((can_rx.data.u8[1] & 0x0F) + (can_rx.data.u8[2] << 8)) * 0.8) - 400;
+            espnow_tx.speed = ((can_rx.data.u8[1] >> 4) + (can_rx.data.u8[2] << 4) * 0.8) - 400;
+            break;
         }
         case id_hvac:
         {
