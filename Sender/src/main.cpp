@@ -10,29 +10,26 @@
 #define DATA_PIN 27
 
 // 50:02:91:92:94:D8
-uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+uint8_t d1Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+uint8_t d2Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 esp_now_peer_info_t peerInfo;
 
 // ESPNow data structures
 struct espnow_tx
 {
-    int speed;
-    int hvac_left;
-    int hvac_right;
-    int queue;
-} espnow_tx;
+    u16_t id;
+    byte data[8];
+} d1_tx, d2_tx;
 
 struct espnow_rx
 {
-    byte id;
-    int value;
-} espnow_rx;
+    u16_t id;
+} d1_rx, d2_rx;
 
 // CanBus Memory
 CAN_device_t CAN_cfg;          // CAN Config
-const int rx_queue_size = 256; // Receive Queue size
 CAN_frame_t can_rx;            // CAN Frame for receiving
-CAN_frame_t can_tx;            // CAN Frame for sending
+const int rx_queue_size = 256; // Receive Queue size
 
 // CanBus IDs
 const u16_t id_speed = 599;
