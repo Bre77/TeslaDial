@@ -39,14 +39,14 @@ const u16_t id_speed = 599;
 const u16_t id_hvac = 755;
 const u16_t id_test = 0;
 
-struct
+struct data_speed
 {
-    s16_t ignore1 : 12;
-    s16_t speed : 12;
-    // u8_t ignore2 : 8;
+    u16_t ignore1 : 12;
+    u16_t speed : 12;
+    u8_t ignore2 : 8;
 } data_speed;
 
-struct
+struct data_hvac
 {
     u8_t hvac_left : 5;
     u8_t ignore1 : 3;
@@ -186,16 +186,25 @@ void loop()
         {
         case id_speed:
         {
-            memcpy(&data_speed, can_rx.data.u8, 3);
-            espnow_tx.speed = (data_speed.speed * 0.8) - 400;
-            Serial.println(data_speed.speed);
-            Serial.println(espnow_tx.speed);
+            // memcpy(&data_speed, can_rx.data.u8, 3);
+            int speed1 = (can_rx.data.u8[1] & 0x0F) + (can_rx.data.u8[2] << 8);
+            int speed2 = (can_rx.data.u8[1] & 0x0F) << 8 + can_rx.data.u8[2];
+            Serial.println("RECIEVED");
+            Serial.println(can_rx.data.u8[0]);
+            Serial.println(can_rx.data.u8[1]);
+            Serial.println(can_rx.data.u8[2]);
+            Serial.println(speed1);
+            Serial.println(speed1 * 0.8 - 400);
+            Serial.println(speed2);
+            Serial.println(speed2 * 0.8 - 400);
+
+            espnow_tx.speed = (((can_rx.data.u8[1] & 0x0F) + (can_rx.data.u8[2] << 8)) * 0.8) - 400;
         }
         case id_hvac:
         {
-            memcpy(&data_hvac, can_rx.data.u8, 2);
-            espnow_tx.hvac_left = (data_hvac.hvac_left * 5) + 150;
-            espnow_tx.hvac_right = (data_hvac.hvac_right * 5) + 150;
+            // memcpy(&data_hvac, can_rx.data.u8, 2);
+            espnow_tx.hvac_left = ((can_rx.data.u8[0] >> 3) * 5) + 150;
+            espnow_tx.hvac_right = ((can_rx.data.u8[1] >> 3) * 5) + 150;
             break;
         }
         default:
