@@ -9,20 +9,24 @@
 #define NUM_LEDS 1
 #define DATA_PIN 27
 
-// D4:D4:DA:9D:FD:E4
+esp_now_peer_info_t peerInfo;
+
 const uint8_t d1_address[6] = {0x48, 0x27, 0xE2, 0xE3, 0xC9, 0x20};
 const uint8_t d2_address[6] = {0x48, 0x27, 0xE2, 0xE3, 0xAA, 0xEC};
-esp_now_peer_info_t peerInfo;
-const byte d1_check = 0x20;
-const byte d2_check = 0xEC;
+const byte d1_check = 0x20; // Last byte of MAC Address
+const byte d2_check = 0xEC; // Last byte of MAC Address
 
-u16_t d1_id, d2_id; // Requested Message IDs
+u16_t d1_id, d2_id;                    // Requested Message IDs
+u8_t d1_data[8], d2_data[8];           // Data to send
+u8_t d1_length, d2_length;             // Data length
+bool d1_ready = true, d2_ready = true; // Ready to send
+bool restart_can = false;              // Restart CAN Bus
 
 // CanBus Memory
 CAN_device_t CAN_cfg;         // CAN Config
 CAN_frame_t can_rx;           // CAN Frame for receiving
-const int rx_queue_size = 16; // Receive Queue size
 CAN_filter_t p_filter;        // Filters
+const int rx_queue_size = 16; // Receive Queue size
 
 // LEDS
 CRGB leds[NUM_LEDS];
@@ -51,34 +55,34 @@ void error(String msg = "Error")
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len)
 {
-    Serial.print(mac_addr[0]);
-    Serial.print(mac_addr[1]);
-    Serial.print(mac_addr[2]);
-    Serial.print(mac_addr[3]);
-    Serial.print(mac_addr[4]);
-    Serial.println(mac_addr[5]);
     switch (mac_addr[5])
     {
     case d1_check:
-
-        d1_id = data[0] << 8 + data[1];
+        d1_id = data[0] + (data[1] << 8);
         p_filter.ACR0 = d1_id >> 3;
         p_filter.ACR1 = d1_id << 5;
-        ESP32Can.CANConfigFilter(&p_filter);
-        led(CRGB::Yellow);
+        restart_can = true;
         break;
-
     case d2_check:
-
-        d2_id = data[0] << 8 + data[1];
-        p_filter.ACR0 = d2_id >> 3;
-        p_filter.ACR1 = d2_id << 5;
-        ESP32Can.CANConfigFilter(&p_filter);
-        led(CRGB::Purple);
+        d2_id = data[0] + (data[1] << 8);
+        p_filter.ACR2 = d1_id >> 3;
+        p_filter.ACR3 = d1_id << 5;
+        restart_can = true;
         break;
+    }
+}
 
-    default:
+void OnDataSend(const uint8_t *mac_addr, esp_now_send_status_t status)
+{
+    if (status != ESP_NOW_SEND_SUCCESS)
         led(CRGB::Red);
+    switch (mac_addr[5])
+    {
+    case d1_check:
+        d1_ready = true;
+        break;
+    case d2_check:
+        d2_ready = true;
         break;
     }
 }
@@ -102,6 +106,7 @@ void setup()
 
     // ESPNow callback
     esp_now_register_recv_cb(OnDataRecv);
+    esp_now_register_send_cb(OnDataSend);
 
     // ESP Now Peers
     peerInfo.channel = 0;
@@ -132,22 +137,29 @@ void setup()
 
 void loop()
 {
+    if (restart_can)
+    {
+        led(CRGB::Blue);
+        ESP32Can.CANStop();
+        ESP32Can.CANConfigFilter(&p_filter);
+        ESP32Can.CANInit();
+        led(CRGB::Green);
+    }
     if (xQueueReceive(CAN_cfg.rx_queue, &can_rx, 3 * portTICK_PERIOD_MS) == pdTRUE)
     {
-        Serial.print("ID: ");
-        Serial.print(can_rx.MsgID);
-        Serial.print(" D1: ");
-        Serial.print(d1_id);
-        Serial.print(" D2: ");
-        Serial.println(d2_id);
-
-        if (can_rx.MsgID == d1_id)
+        if (d1_ready & can_rx.MsgID == d1_id)
         {
-            esp_now_send(d1_address, can_rx.data.u8, can_rx.FIR.B.DLC);
+            d1_ready = false;
+            d1_length = can_rx.FIR.B.DLC;
+            memcpy(d1_data, can_rx.data.u8, d1_length);
+            esp_now_send(d1_address, d1_data, d1_length);
         }
-        if (can_rx.MsgID == d2_id)
+        if (d2_ready & can_rx.MsgID == d2_id)
         {
-            esp_now_send(d2_address, can_rx.data.u8, can_rx.FIR.B.DLC);
+            d2_ready = false;
+            d2_length = can_rx.FIR.B.DLC;
+            memcpy(d2_data, can_rx.data.u8, d2_length);
+            esp_now_send(d2_address, d2_data, d2_length);
         }
     }
 }

@@ -15,13 +15,14 @@ u8_t page = 0;
 
 #define PAGES 4
 
-// Receive data into the struct and save it to the metrics array
+// Receive data
 void OnDataRecv(const uint8_t *mac, const uint8_t *data, int len)
 {
+    M5Dial.Display.drawNumber(data[0], 30, 120);
     switch (page)
     {
     case (0): // Speed
-        value = (data[1] >> 4 + data[2] << 4) * 0.8 - 400;
+        value = ((data[1] >> 4) | (data[2] << 4)) * 0.8 - 400;
         break;
 
     case (1): // AC Left
@@ -32,8 +33,10 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *data, int len)
         value = (data[1] >> 3) * 5 + 150;
         break;
     }
+    render = true;
 }
 
+// Craft filters based on CAN Bus ID
 const u16_t id_blank = 0;
 const u16_t id_speed = 599;
 const u16_t id_hvac = 755;
@@ -102,7 +105,6 @@ void setup()
 
 void loop()
 {
-    M5Dial.update();
     long newPosition = M5Dial.Encoder.read() / 4;
     s8_t change = newPosition - oldPosition;
     if (change != 0)
