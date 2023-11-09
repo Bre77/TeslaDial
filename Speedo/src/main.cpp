@@ -4,64 +4,83 @@
 #include <WiFi.h>
 #include <esp_now.h>
 
-#define PAGES 4
-
-uint8_t senderAddress[] = {0x50, 0x02, 0x91, 0x92, 0x94, 0xD8};
+// ESP CAN is xD4:D4:DA:9D:FD:E4
+uint8_t senderAddress[] = {0xD4, 0xD4, 0xDA, 0x9D, 0xFD, 0xE4};
 esp_now_peer_info_t peerInfo;
 
 bool render = true;
 long oldPosition = 0;
 int value = 0;
 u8_t page = 0;
-// const char titles[PAGES] = {"Speed", "AC Left", "AC Right", "CAN Queue" };
+
+#define PAGES 4
 
 // Receive data into the struct and save it to the metrics array
 void OnDataRecv(const uint8_t *mac, const uint8_t *data, int len)
 {
     switch (page)
     {
-        case(0){
-            value = data[3];
-            break;
-        }
-        case(1){
-            value = data[0] >> 3;
-            break;
-        }
-        case(2){
-            value = data[1] >> 3;
-            break;
-        }
+    case (0): // Speed
+        value = (data[1] >> 4 + data[2] << 4) * 0.8 - 400;
+        break;
+
+    case (1): // AC Left
+        value = (data[0] >> 3) * 5 + 150;
+        break;
+
+    case (2): // AC Right
+        value = (data[1] >> 3) * 5 + 150;
+        break;
     }
 }
 
+const u16_t id_blank = 0;
+const u16_t id_speed = 599;
+const u16_t id_hvac = 755;
 
-
-void drawPage()
+void changePage()
 {
-    M5Dial.Display.clear();
     M5Dial.Display.setTextSize(1);
     switch (page)
     {
     case 0:
-            M5Dial.Display.drawString("Speed", 120, 30);
-            M5Dial.Display.drawString("KM/H", 120, 200);
-            break;
-        case 1:
-            M5Dial.Display.drawString("AC Left", 120, 30);
-            M5Dial.Display.drawString("Celsius", 120, 200);
-            break;
-        case 2:
-            M5Dial.Display.drawString("AC Right", 120, 30);
-            M5Dial.Display.drawString("Celsius", 120, 200);
-            break;
-        case 3:
-            M5Dial.Display.drawString("CAN Queue", 120, 30);
-            M5Dial.Display.drawString("Frames", 120, 200);
-            break;
+        if (esp_now_send(senderAddress, (uint8_t *)&id_speed, 2) != ESP_OK)
+        {
+            M5Dial.Display.clearDisplay();
+            M5Dial.Display.drawString("ID Failed", 120, 120);
+            delay(1000);
         }
+        M5Dial.Display.drawString("  Speed  ", 120, 30);
+        M5Dial.Display.drawString("   KM/H   ", 120, 200);
+        break;
+    case 1:
+        if (esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2) != ESP_OK)
+        {
+            M5Dial.Display.clearDisplay();
+            M5Dial.Display.drawString("ID Failed", 120, 120);
+            delay(1000);
+        }
+        M5Dial.Display.drawString("  AC Left  ", 120, 30);
+        M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        break;
+    case 2:
+        if (esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2) != ESP_OK)
+        {
+            M5Dial.Display.clearDisplay();
+            M5Dial.Display.drawString("ID Failed", 120, 120);
+            delay(1000);
+        }
+        M5Dial.Display.drawString("  AC Right  ", 120, 30);
+        M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        break;
+    case 3:
+        esp_now_send(senderAddress, (uint8_t *)&id_blank, 2);
+        M5Dial.Display.drawString("   Blank   ", 120, 30);
+        M5Dial.Display.drawString("  Blank  ", 120, 200);
+        break;
+    }
 
-        render = true;
+    render = true;
 }
 
 void setup()
@@ -69,10 +88,17 @@ void setup()
     // put your setup code here, to run once:
     auto cfg = M5.config();
     M5Dial.begin(cfg, true, false);
+    M5Dial.Display.setRotation(3);
+    M5Dial.Display.setTextDatum(middle_center);
+    M5Dial.Display.setFont(&FreeSansBold12pt7b);
 
     WiFi.mode(WIFI_STA);
     if (esp_now_init() != ESP_OK)
-        ESP.restart();
+    {
+        M5Dial.Display.setColor(RED);
+        M5Dial.Display.drawString("WiFi Failed", 120, 120);
+        delay(1000);
+    }
 
     esp_now_register_recv_cb(OnDataRecv);
 
@@ -81,15 +107,12 @@ void setup()
     peerInfo.encrypt = false;
     if (esp_now_add_peer(&peerInfo) != ESP_OK)
     {
-        Serial.println("Failed to add sender peer");
-        return;
+        M5Dial.Display.setColor(RED);
+        M5Dial.Display.drawString("Peer Failed", 120, 120);
+        delay(1000);
     }
-    Serial.println("Added sender peer");
 
-    M5Dial.Display.setRotation(3);
-    M5Dial.Display.setTextDatum(middle_center);
-    M5Dial.Display.setFont(&FreeSansBold12pt7b);
-    drawPage();
+    changePage();
 }
 
 void loop()
@@ -100,28 +123,13 @@ void loop()
     if (change != 0)
     {
         page = (PAGES + page + change) % PAGES;
-        Serial.println(page);
         oldPosition = newPosition;
-        drawPage();
+        changePage();
     }
     if (render)
     {
-        render = false;
         M5Dial.Display.setTextSize(4);
-        switch (page)
-        {
-        case 0:
-            M5Dial.Display.drawString("  " + String(espnow_rx.speed / 10) + "." + String(espnow_rx.speed % 10) + "  ", 120, 120);
-            break;
-        case 1:
-            M5Dial.Display.drawString("  " + String(espnow_rx.hvac_left / 10) + "." + String(espnow_rx.hvac_left % 10) + "  ", 120, 120);
-            break;
-        case 2:
-            M5Dial.Display.drawString("  " + String(espnow_rx.hvac_right / 10) + "." + String(espnow_rx.hvac_right % 10) + "  ", 120, 120);
-            break;
-        case 3:
-            M5Dial.Display.drawString("  " + String(espnow_rx.queue) + "  ", 120, 120);
-            break;
-        }
+        M5Dial.Display.drawString("  " + String(value / 10) + "." + String(value % 10) + "  ", 120, 120);
+        render = false;
     }
 }

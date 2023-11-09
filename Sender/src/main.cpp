@@ -9,34 +9,23 @@
 #define NUM_LEDS 1
 #define DATA_PIN 27
 
-// 50:02:91:92:94:D8
-const uint8_t d1_address[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-const uint8_t d2_address[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+// D4:D4:DA:9D:FD:E4
+const uint8_t d1_address[6] = {0x48, 0x27, 0xE2, 0xE3, 0xC9, 0x20};
+const uint8_t d2_address[6] = {0x48, 0x27, 0xE2, 0xE3, 0xAA, 0xEC};
 esp_now_peer_info_t peerInfo;
-const byte d1_check = 0xAA;
-const byte d2_check = 0xBB;
-
-// ESPNow data structures
-/*struct espnow_tx
-{
-    u16_t id;     // Message ID
-    u8_t data[8]; // Message Data
-} d1_tx, d2_tx;*/
+const byte d1_check = 0x20;
+const byte d2_check = 0xEC;
 
 u16_t d1_id, d2_id; // Requested Message IDs
 
 // CanBus Memory
-CAN_device_t CAN_cfg;          // CAN Config
-CAN_frame_t can_rx;            // CAN Frame for receiving
-const int rx_queue_size = 256; // Receive Queue size
-CAN_filter_t p_filter;
+CAN_device_t CAN_cfg;         // CAN Config
+CAN_frame_t can_rx;           // CAN Frame for receiving
+const int rx_queue_size = 16; // Receive Queue size
+CAN_filter_t p_filter;        // Filters
 
 // LEDS
 CRGB leds[NUM_LEDS];
-
-// Timing
-unsigned long next_send = 0;
-bool send = false;
 
 // Helper to set Button LED
 void led(CRGB color)
@@ -62,24 +51,35 @@ void error(String msg = "Error")
 
 void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len)
 {
+    Serial.print(mac_addr[0]);
+    Serial.print(mac_addr[1]);
+    Serial.print(mac_addr[2]);
+    Serial.print(mac_addr[3]);
+    Serial.print(mac_addr[4]);
+    Serial.println(mac_addr[5]);
     switch (mac_addr[5])
     {
     case d1_check:
-    {
-        d1_id = data[0];
+
+        d1_id = data[0] << 8 + data[1];
         p_filter.ACR0 = d1_id >> 3;
         p_filter.ACR1 = d1_id << 5;
         ESP32Can.CANConfigFilter(&p_filter);
+        led(CRGB::Yellow);
         break;
-    }
+
     case d2_check:
-    {
-        d2_id = data[0];
+
+        d2_id = data[0] << 8 + data[1];
         p_filter.ACR0 = d2_id >> 3;
         p_filter.ACR1 = d2_id << 5;
         ESP32Can.CANConfigFilter(&p_filter);
+        led(CRGB::Purple);
         break;
-    }
+
+    default:
+        led(CRGB::Red);
+        break;
     }
 }
 
@@ -96,6 +96,7 @@ void setup()
 
     // Setup WiFi
     WiFi.mode(WIFI_STA);
+    Serial.println(WiFi.macAddress());
     if (esp_now_init() != ESP_OK)
         error("Failed to start ESPNow");
 
@@ -133,6 +134,13 @@ void loop()
 {
     if (xQueueReceive(CAN_cfg.rx_queue, &can_rx, 3 * portTICK_PERIOD_MS) == pdTRUE)
     {
+        Serial.print("ID: ");
+        Serial.print(can_rx.MsgID);
+        Serial.print(" D1: ");
+        Serial.print(d1_id);
+        Serial.print(" D2: ");
+        Serial.println(d2_id);
+
         if (can_rx.MsgID == d1_id)
         {
             esp_now_send(d1_address, can_rx.data.u8, can_rx.FIR.B.DLC);
