@@ -44,32 +44,17 @@ void changePage()
     switch (page)
     {
     case 0:
-        if (esp_now_send(senderAddress, (uint8_t *)&id_speed, 2) != ESP_OK)
-        {
-            M5Dial.Display.clearDisplay();
-            M5Dial.Display.drawString("ID Failed", 120, 120);
-            delay(1000);
-        }
+        esp_now_send(senderAddress, (uint8_t *)&id_speed, 2);
         M5Dial.Display.drawString("  Speed  ", 120, 30);
         M5Dial.Display.drawString("   KM/H   ", 120, 200);
         break;
     case 1:
-        if (esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2) != ESP_OK)
-        {
-            M5Dial.Display.clearDisplay();
-            M5Dial.Display.drawString("ID Failed", 120, 120);
-            delay(1000);
-        }
+        esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2);
         M5Dial.Display.drawString("  AC Left  ", 120, 30);
         M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
     case 2:
-        if (esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2) != ESP_OK)
-        {
-            M5Dial.Display.clearDisplay();
-            M5Dial.Display.drawString("ID Failed", 120, 120);
-            delay(1000);
-        }
+        esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2);
         M5Dial.Display.drawString("  AC Right  ", 120, 30);
         M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
