@@ -17,7 +17,27 @@ s16_t old_value = 0;
 u32_t next_time = 0;
 u8_t page = 0;
 
-#define PAGES 8
+void ExtractValue(u8_t start, u8_t length, u8_t *data)
+{
+    value = 0;
+    u8_t offset = start % 8;
+    for (u8_t bit = start; bit < (start + length); bit++)
+    {
+        value += (data[bit / 8] >> (bit % 8) & 1) << (bit - start);
+    }
+}
+
+#define PAGES 6
+
+#define PAGE_SPEED 0
+#define PAGE_FRONT_TORQUE 1
+#define PAGE_REAR_TORQUE 2
+#define PAGE_HV_BATTERY_VOLTAGE 3
+#define PAGE_HV_BATTERY_CURRENT 4
+#define PAGE_INDICATORS 5
+
+#define PAGE_AC_LEFT 101
+#define PAGE_AC_RIGHT 102
 
 // Receive data
 void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
@@ -27,36 +47,49 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
     next_time = millis() + 99;
     old_value = value;
 
+    /* 0|16
+    |   LSB  |  MSB   |
+    |76543210|76543210|
+    */
+    /* 4|8
+     |  LSB   |  MSB   |
+     |7654____|____3210|
+     */
+
     switch (page)
     {
-    case 0: // Speed 12|12
-        value = ((data[1] >> 4) + (data[2] << 4)) * 0.8 - 400;
+    case PAGE_SPEED: // Speed 12|12@1+
+        value = ((data[1] >> 4) | (data[2] << 4)) * 0.8 - 400;
         break;
 
-    case 1: // AC Left 0|5
-        value = (data[0] & B00011111) * 5 + 150;
+    case PAGE_AC_LEFT: // AC Left 0|5@1+
+        value = (data[0] & 31) * 5 + 150;
         break;
 
-    case 2: // AC Right 8|5
-        value = (data[1] & B00011111) * 5 + 150;
+    case PAGE_AC_RIGHT: // AC Right 8|5@1+
+        value = (data[1] & 31) * 5 + 150;
         break;
 
-    case 3:                                                    // Front Torque 21|13
-        value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; //+ (data[3] & B00000000 << 8)
+    case PAGE_FRONT_TORQUE: // Front Torque 21|13@1-
+        // value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; //+ (data[3] & B00000000 << 8)
+        value = (data[2] > 3 | (data[3] & 127) < 5) * (data[3] & 128) ? 2.22 : -2.22;
         break;
 
-    case 4:                                                    // Rear Torque 21|13
-        value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; // + (data[3] & B10000000 << 8)
+    case PAGE_REAR_TORQUE: // Rear Torque 21|13@1-
+        // value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; // + (data[3] & B10000000 << 8)
+        value = (data[2] > 3 | (data[3] & 127) < 5) * (data[3] & 128) ? 2.22 : -2.22;
         break;
 
-    case 5: // HV Battery Voltage 0|16
-        value = (data[0] | data[1] << 8) * 0.1;
+    case PAGE_HV_BATTERY_VOLTAGE: // HV Battery Voltage 0|16
+        memcpy(&value, &data[0], 2);
+        // value = (data[0] | data[1] << 8) * 0.1;
         break;
 
-    case 6: // HV Battery Current 16|16
-        value = (data[2] | data[3] << 8);
+    case PAGE_HV_BATTERY_CURRENT: // HV Battery Current 16|16@1-
+        memcpy(&value, &data[2], 2);
+        // value = (data[2] | data[3] << 8);
         break;
-    case 7: // Indicators
+    case PAGE_INDICATORS: // Indicators
         value = data[0] >> 4;
         break;
     }
@@ -78,42 +111,42 @@ void changePage()
     M5Dial.Display.setTextSize(1);
     switch (page)
     {
-    case 0:
+    case PAGE_SPEED:
         esp_now_send(senderAddress, (u8_t *)&id_speed, 2);
         M5Dial.Display.drawString("     Speed     ", 120, 40);
         // M5Dial.Display.drawString("   KM/H   ", 120, 200);
         break;
-    case 1:
+    case PAGE_AC_LEFT:
         esp_now_send(senderAddress, (u8_t *)&id_hvac, 2);
         M5Dial.Display.drawString("   AC Left   ", 120, 40);
         // M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
-    case 2:
+    case PAGE_AC_RIGHT:
         esp_now_send(senderAddress, (u8_t *)&id_hvac, 2);
         M5Dial.Display.drawString("   AC Right   ", 120, 40);
         // M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
-    case 3:
+    case PAGE_FRONT_TORQUE:
         esp_now_send(senderAddress, (u8_t *)&id_fronttorque, 2);
         M5Dial.Display.drawString("   Front Torque   ", 120, 40);
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
-    case 4:
+    case PAGE_REAR_TORQUE:
         esp_now_send(senderAddress, (u8_t *)&id_reartorque, 2);
         M5Dial.Display.drawString("   Rear Torque   ", 120, 40);
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
-    case 5:
+    case PAGE_HV_BATTERY_VOLTAGE:
         esp_now_send(senderAddress, (u8_t *)&id_hvbattery, 2);
         M5Dial.Display.drawString("   HV Voltage   ", 120, 40);
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
-    case 6:
+    case PAGE_HV_BATTERY_CURRENT:
         esp_now_send(senderAddress, (u8_t *)&id_hvbattery, 2);
         M5Dial.Display.drawString("   HV Current   ", 120, 40);
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
-    case 7:
+    case PAGE_INDICATORS:
         esp_now_send(senderAddress, (u8_t *)&id_lights, 2);
         M5Dial.Display.drawString("   Indicators   ", 120, 40);
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
