@@ -11,64 +11,104 @@ esp_now_peer_info_t peerInfo;
 bool render = true;
 long oldPosition = 0;
 int value = 0;
+int oldvalue = 0;
+long lasttime = 0;
 u8_t page = 0;
 
-#define PAGES 4
+#define PAGES 7
 
 // Receive data
 void OnDataRecv(const uint8_t *mac, const uint8_t *data, int len)
 {
-    M5Dial.Display.drawNumber(data[0], 30, 120);
+    if (millis() < lasttime)
+        return;
+    lasttime = millis() + 99;
+    oldvalue = value;
+    M5Dial.Display.setTextSize(1);
+    M5Dial.Display.drawString("-----" + String(data[0], HEX) + ":" + String(data[1], HEX) + ":" + String(data[2], HEX) + ":" + String(data[3], HEX) + "-----", 120, 180);
     switch (page)
     {
-    case (0): // Speed
-        value = ((data[1] >> 4) | (data[2] << 4)) * 0.8 - 400;
+    case (0): // Speed 12|12
+        value = ((data[1] >> 4) + (data[2] << 4)) * 0.8 - 400;
         break;
 
-    case (1): // AC Left
-        value = (data[0] >> 3) * 5 + 150;
+    case (1): // AC Left 0|5
+        value = (data[0] & B00011111) * 5 + 150;
         break;
 
-    case (2): // AC Right
-        value = (data[1] >> 3) * 5 + 150;
+    case (2): // AC Right 8|5
+        value = (data[1] & B00011111) * 5 + 150;
+        break;
+
+    case (3): // Front Torque 21|13
+        value = ((data[2] & B11111000 >> 3) + (data[3] << 8)) * 2.22;
+        break;
+
+    case (4): // Rear Torque 21|13
+        value = ((data[2] & B11111000 >> 3) + (data[3] << 8)) * 2.22;
+        break;
+
+    case (5): // HV Battery Voltage 0|16
+        value = ((data[0]) + (data[1] << 8)) * 0.1;
+        break;
+
+    case (6): // HV Battery Current 16|16
+        value = ((data[2]) + (data[3] << 8)) * -1;
         break;
     }
-    render = true;
+    render = value != oldvalue;
 }
 
 // Craft filters based on CAN Bus ID
-const u16_t id_blank = 0;
-const u16_t id_speed = 599;
-const u16_t id_hvac = 755;
+
+const u16_t id_speed = 599, id_hvac = 755, id_fronttorque = 469, id_reartorque = 472, id_hvbattery = 306;
 
 void changePage()
 {
+    M5Dial.Display.setTextSize(4);
+    M5Dial.Display.drawString("                                ", 120, 120);
     M5Dial.Display.setTextSize(1);
     switch (page)
     {
     case 0:
         esp_now_send(senderAddress, (uint8_t *)&id_speed, 2);
-        M5Dial.Display.drawString("  Speed  ", 120, 30);
-        M5Dial.Display.drawString("   KM/H   ", 120, 200);
+        M5Dial.Display.drawString("     Speed     ", 120, 40);
+        // M5Dial.Display.drawString("   KM/H   ", 120, 200);
         break;
     case 1:
         esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2);
-        M5Dial.Display.drawString("  AC Left  ", 120, 30);
-        M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        M5Dial.Display.drawString("   AC Left   ", 120, 40);
+        // M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
     case 2:
         esp_now_send(senderAddress, (uint8_t *)&id_hvac, 2);
-        M5Dial.Display.drawString("  AC Right  ", 120, 30);
-        M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        M5Dial.Display.drawString("   AC Right   ", 120, 40);
+        // M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
     case 3:
-        esp_now_send(senderAddress, (uint8_t *)&id_blank, 2);
-        M5Dial.Display.drawString("   Blank   ", 120, 30);
-        M5Dial.Display.drawString("  Blank  ", 120, 200);
+        esp_now_send(senderAddress, (uint8_t *)&id_fronttorque, 2);
+        M5Dial.Display.drawString("   Front Torque   ", 120, 40);
+        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        break;
+    case 4:
+        esp_now_send(senderAddress, (uint8_t *)&id_reartorque, 2);
+        M5Dial.Display.drawString("   Rear Torque   ", 120, 40);
+        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        break;
+    case 5:
+        esp_now_send(senderAddress, (uint8_t *)&id_hvbattery, 2);
+        M5Dial.Display.drawString("   HV Voltage   ", 120, 40);
+        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        break;
+    case 6:
+        esp_now_send(senderAddress, (uint8_t *)&id_hvbattery, 2);
+        M5Dial.Display.drawString("   HV Current   ", 120, 40);
+        // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
     }
-
-    render = true;
+    value = INT_MIN;
+    lasttime = 0;
+    render = false;
 }
 
 void setup()

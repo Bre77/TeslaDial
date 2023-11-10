@@ -62,12 +62,14 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len)
         p_filter.ACR0 = d1_id >> 3;
         p_filter.ACR1 = d1_id << 5;
         restart_can = true;
+        Serial.println(d1_id);
         break;
     case d2_check:
         d2_id = data[0] + (data[1] << 8);
-        p_filter.ACR2 = d1_id >> 3;
-        p_filter.ACR3 = d1_id << 5;
+        p_filter.ACR2 = d2_id >> 3;
+        p_filter.ACR3 = d2_id << 5;
         restart_can = true;
+        Serial.println(d2_id);
         break;
     }
 }
@@ -135,11 +137,16 @@ void setup()
     led(CRGB::Green);
 }
 
+#define RATELIMIT 199
+long d1_time, d2_time;
+
 void loop()
 {
     if (restart_can)
     {
-        led(CRGB::Blue);
+        Serial.println("Restarting CAN");
+        restart_can = false;
+        led(CRGB::Yellow);
         ESP32Can.CANStop();
         ESP32Can.CANConfigFilter(&p_filter);
         ESP32Can.CANInit();
@@ -147,19 +154,22 @@ void loop()
     }
     if (xQueueReceive(CAN_cfg.rx_queue, &can_rx, 3 * portTICK_PERIOD_MS) == pdTRUE)
     {
-        if (d1_ready & can_rx.MsgID == d1_id)
+        Serial.print(can_rx.MsgID);
+        Serial.print(" ");
+        Serial.print(d1_ready);
+        Serial.print(" ");
+        Serial.println(d2_ready);
+        if (d1_ready & can_rx.MsgID == d1_id & millis() > d1_time)
         {
             d1_ready = false;
-            d1_length = can_rx.FIR.B.DLC;
-            memcpy(d1_data, can_rx.data.u8, d1_length);
-            esp_now_send(d1_address, d1_data, d1_length);
+            d1_time = millis() + RATELIMIT;
+            esp_now_send(d1_address, (u8_t *)&can_rx.data.u8, can_rx.FIR.B.DLC);
         }
-        if (d2_ready & can_rx.MsgID == d2_id)
+        if (d2_ready & can_rx.MsgID == d2_id & millis() > d2_time)
         {
             d2_ready = false;
-            d2_length = can_rx.FIR.B.DLC;
-            memcpy(d2_data, can_rx.data.u8, d2_length);
-            esp_now_send(d2_address, d2_data, d2_length);
+            d2_time = millis() + RATELIMIT;
+            esp_now_send(d2_address, (u8_t *)&can_rx.data.u8, can_rx.FIR.B.DLC);
         }
     }
 }
