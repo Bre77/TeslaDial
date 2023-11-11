@@ -67,25 +67,20 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
     case PAGE_SPEED: // 12|12@1+
         value = (data[1] >> 4 | data[2] << 4) * 0.8 - 400;
         break;
-
     case PAGE_AC_LEFT: // 0|5@1+
         value = (data[0] & 31) * 5 + 150;
         break;
-
     case PAGE_AC_RIGHT: // 8|5@1+
         value = (data[1] & 31) * 5 + 150;
         break;
-
     case PAGE_FRONT_TORQUE: // 21|13@1-
         // value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; //+ (data[3] & B00000000 << 8)
         value = (data[2] >> 3 | (data[3] & 127) << 5) * (data[3] & 128) ? 2.22 : -2.22;
         break;
-
     case PAGE_REAR_TORQUE: // 21|13@1-
         // value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; // + (data[3] & B10000000 << 8)
         value = (data[2] >> 3 | (data[3] & 127) << 5) * (data[3] & 128) ? 2.22 : -2.22;
         break;
-
     case PAGE_FRONT_MOTOR: // 11|11@1+ (1,0) [0|2047]
         value = (data[1] >> 5 | data[2] << 3) * 10;
         break;
@@ -96,8 +91,6 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
         value = (data[0] | data[1] << 8) * 0.1;
         break;
     case PAGE_HV_BATTERY_CURRENT: // 16|16@1- (-0.1,0) [-3276.7|3276.7]
-        // memcpy(&value, &data[2], 2);
-        // value *= 10;
         value = (data[2] | (data[3] & 127) << 8) * (data[3] & 128 ? -10 : 10);
         break;
     case PAGE_INDICATORS: // 4|4?
@@ -116,8 +109,8 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
     render = value != old_value;
 
     // This is for debugging only
-    M5Dial.Display.setTextSize(1);
-    M5Dial.Display.drawString("     " + String(data[0], HEX) + ":" + String(data[1], HEX) + ":" + String(data[2], HEX) + ":" + String(data[3], HEX) + "     ", 120, 180);
+    // M5Dial.Display.setTextSize(0.5);
+    // M5Dial.Display.drawString("     " + String(data[0], HEX) + ":" + String(data[1], HEX) + ":" + String(data[2], HEX) + ":" + String(data[3], HEX) + "     ", 120, 200);
 }
 
 // Craft filters based on CAN Bus ID
@@ -144,62 +137,67 @@ void drawPage()
     case PAGE_SPEED:
         esp_now_send(senderAddress, (u8_t *)&id_speed, 2);
         M5Dial.Display.drawString("      Speed      ", 120, 40);
-        // M5Dial.Display.drawString("   KM/H   ", 120, 200);
+        M5Dial.Display.drawString("   KM/H   ", 120, 200);
         break;
     case PAGE_AC_LEFT:
         esp_now_send(senderAddress, (u8_t *)&id_hvac_request, 2);
         M5Dial.Display.drawString("   AC Left   ", 120, 40);
-        // M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
     case PAGE_AC_RIGHT:
         esp_now_send(senderAddress, (u8_t *)&id_hvac_request, 2);
         M5Dial.Display.drawString("   AC Right   ", 120, 40);
-        // M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
     case PAGE_FRONT_TORQUE:
         esp_now_send(senderAddress, (u8_t *)&id_front_torque, 2);
         M5Dial.Display.drawString("   Front Torque   ", 120, 40);
-        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
     case PAGE_REAR_TORQUE:
         esp_now_send(senderAddress, (u8_t *)&id_rear_torque, 2);
         M5Dial.Display.drawString("   Rear Torque   ", 120, 40);
-        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        M5Dial.Display.drawString("    Nm    ", 120, 200);
         break;
     case PAGE_FRONT_MOTOR:
         esp_now_send(senderAddress, (u8_t *)&id_front_motor, 2);
         M5Dial.Display.drawString("   Front Motor   ", 120, 40);
-        // M5Dial.Display.drawString("  Amps  ", 120, 200);
+        M5Dial.Display.drawString("   Amps   ", 120, 200);
         break;
     case PAGE_REAR_MOTOR:
         esp_now_send(senderAddress, (u8_t *)&id_rear_motor, 2);
         M5Dial.Display.drawString("   Rear Motor   ", 120, 40);
-        // M5Dial.Display.drawString("  Amps  ", 120, 200);
+        M5Dial.Display.drawString("   Amps   ", 120, 200);
         break;
     case PAGE_HV_BATTERY_VOLTAGE:
         esp_now_send(senderAddress, (u8_t *)&id_hv_battery, 2);
         M5Dial.Display.drawString("   HV Voltage   ", 120, 40);
-        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        M5Dial.Display.drawString("   Volts   ", 120, 200);
         break;
     case PAGE_HV_BATTERY_CURRENT:
         esp_now_send(senderAddress, (u8_t *)&id_hv_battery, 2);
         M5Dial.Display.drawString("   HV Current   ", 120, 40);
-        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        M5Dial.Display.drawString("   Amps   ", 120, 200);
         break;
     case PAGE_INDICATORS:
         esp_now_send(senderAddress, (u8_t *)&id_lights, 2);
         M5Dial.Display.drawString("   Indicators   ", 120, 40);
-        // M5Dial.Display.drawString("  Nm  ", 120, 200);
+        M5Dial.Display.drawString("            ", 120, 200);
         break;
     case PAGE_CABIN_TEMP:
         esp_now_send(senderAddress, (u8_t *)&id_hvac_status, 2);
         M5Dial.Display.drawString("   Cabin Temp   ", 120, 40);
-        // M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
     case PAGE_ACTUAL_TEMP:
         esp_now_send(senderAddress, (u8_t *)&id_ths, 2);
-        M5Dial.Display.drawString("   Actual Temp   ", 120, 40);
-        // M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        M5Dial.Display.drawString("   Inside Temp   ", 120, 40);
+        M5Dial.Display.drawString("  Celsius  ", 120, 200);
+        break;
+    case PAGE_OUTSIDE_TEMP:
+        esp_now_send(senderAddress, (u8_t *)&id_front_sensor, 2);
+        M5Dial.Display.drawString("   Outside Temp   ", 120, 40);
+        M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
     }
     value = INT16_MAX;
@@ -245,6 +243,7 @@ void setup()
         M5Dial.Display.clear(RED);
         M5Dial.Display.drawString("Peer Failed", 120, 120);
         delay(1000);
+        ESP.restart();
     }
 
     // Draw the page
