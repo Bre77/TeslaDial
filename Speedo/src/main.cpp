@@ -11,11 +11,11 @@ u8_t senderAddress[] = {0xD4, 0xD4, 0xDA, 0x9D, 0xFD, 0xE4};
 esp_now_peer_info_t peerInfo;
 
 bool render = true;
-u32_t oldPosition = 0;
-s16_t value = 0;
-s16_t old_value = 0;
-u32_t next_time = 0;
-u8_t page = 0;
+int32_t oldPosition = 0;
+int16_t value = 0;
+int16_t old_value = 0;
+unsigned long next_time = 0;
+uint8_t page = 0;
 bool dark = true;
 
 void ExtractValue(u8_t start, u8_t length, u8_t *data)
@@ -28,7 +28,7 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
     }
 }
 
-#define PAGES 11
+#define PAGES 10
 
 #define PAGE_SPEED 0
 #define PAGE_FRONT_TORQUE 1
@@ -38,12 +38,12 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
 #define PAGE_HV_BATTERY_VOLTAGE 5
 #define PAGE_HV_BATTERY_CURRENT 6
 #define PAGE_INDICATORS 7
-#define PAGE_CABIN_TEMP 8
-#define PAGE_ACTUAL_TEMP 9
-#define PAGE_OUTSIDE_TEMP 10
+#define PAGE_ACTUAL_TEMP 8
+#define PAGE_OUTSIDE_TEMP 9
 
 #define PAGE_AC_LEFT 101
 #define PAGE_AC_RIGHT 102
+#define PAGE_CABIN_TEMP 103
 
 // Receive data
 void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
@@ -65,7 +65,7 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
     switch (page)
     {
     case PAGE_SPEED: // 12|12@1+
-        value = ((data[1] >> 4) | (data[2] << 4)) * 0.8 - 400;
+        value = (data[1] >> 4 | data[2] << 4) * 0.8 - 400;
         break;
 
     case PAGE_AC_LEFT: // 0|5@1+
@@ -78,12 +78,12 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
 
     case PAGE_FRONT_TORQUE: // 21|13@1-
         // value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; //+ (data[3] & B00000000 << 8)
-        value = (data[2] > 3 | (data[3] & 127) < 5) * (data[3] & 128) ? 2.22 : -2.22;
+        value = (data[2] >> 3 | (data[3] & 127) << 5) * (data[3] & 128) ? 2.22 : -2.22;
         break;
 
     case PAGE_REAR_TORQUE: // 21|13@1-
         // value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; // + (data[3] & B10000000 << 8)
-        value = (data[2] > 3 | (data[3] & 127) < 5) * (data[3] & 128) ? 2.22 : -2.22;
+        value = (data[2] >> 3 | (data[3] & 127) << 5) * (data[3] & 128) ? 2.22 : -2.22;
         break;
 
     case PAGE_FRONT_MOTOR: // 11|11@1+ (1,0) [0|2047]
@@ -95,16 +95,15 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
     case PAGE_HV_BATTERY_VOLTAGE: // 0|16@1+ (0.01,0) [0|655.35]
         value = (data[0] | data[1] << 8) * 0.1;
         break;
-
     case PAGE_HV_BATTERY_CURRENT: // 16|16@1- (-0.1,0) [-3276.7|3276.7]
-        memcpy(&value, &data[2], 2);
-        value *= 10;
-        // value = (data[2] | data[3] << 8);
+        // memcpy(&value, &data[2], 2);
+        // value *= 10;
+        value = (data[2] | (data[3] & 127) << 8) * (data[3] & 128 ? -10 : 10);
         break;
     case PAGE_INDICATORS: // 4|4?
-        value = data[0] >> 4;
+        value = data[0] & 15;
         break;
-    case PAGE_CABIN_TEMP: // 30|11@1+ (0.1,-40)
+    case PAGE_CABIN_TEMP: // 30|11@1+ (0.1,-40) NEED TO IMPLEMENT MULTIPLEXING
         value = (data[3] >> 6 + data[4] << 2 + (data[5] & 128) << 10) - 400;
         break;
     case PAGE_ACTUAL_TEMP: // 1|8@1- (1,-40)
@@ -123,8 +122,17 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
 
 // Craft filters based on CAN Bus ID
 
-const u16_t id_speed = 599, id_hvac_request = 755, id_front_torque = 469, id_rear_torque = 472, id_hvbattery = 306, id_lights = 1013, id_hvac_status[2] = {579, 0}, id_ths = 899, id_front_sensor = 801;
-const u16_t id_front_motor = 421, id_rear_motor = 294;
+const u16_t id_speed = 599;
+const u16_t id_hvac_request = 755;
+const u16_t id_front_torque = 469;
+const u16_t id_rear_torque = 472;
+const u16_t id_hv_battery = 306;
+const u16_t id_lights = 1013;
+const u16_t id_hvac_status = 579;
+const u16_t id_ths = 899;
+const u16_t id_front_sensor = 801;
+const u16_t id_front_motor = 421;
+const u16_t id_rear_motor = 294;
 
 void drawPage()
 {
@@ -169,12 +177,12 @@ void drawPage()
         // M5Dial.Display.drawString("  Amps  ", 120, 200);
         break;
     case PAGE_HV_BATTERY_VOLTAGE:
-        esp_now_send(senderAddress, (u8_t *)&id_hvbattery, 2);
+        esp_now_send(senderAddress, (u8_t *)&id_hv_battery, 2);
         M5Dial.Display.drawString("   HV Voltage   ", 120, 40);
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
     case PAGE_HV_BATTERY_CURRENT:
-        esp_now_send(senderAddress, (u8_t *)&id_hvbattery, 2);
+        esp_now_send(senderAddress, (u8_t *)&id_hv_battery, 2);
         M5Dial.Display.drawString("   HV Current   ", 120, 40);
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
@@ -184,7 +192,7 @@ void drawPage()
         // M5Dial.Display.drawString("  Nm  ", 120, 200);
         break;
     case PAGE_CABIN_TEMP:
-        esp_now_send(senderAddress, (u8_t *)&id_hvac_status, 4);
+        esp_now_send(senderAddress, (u8_t *)&id_hvac_status, 2);
         M5Dial.Display.drawString("   Cabin Temp   ", 120, 40);
         // M5Dial.Display.drawString("  Celsius  ", 120, 200);
         break;
@@ -206,7 +214,7 @@ void setup()
 
     // Setup persistant storage
     preferences.begin("dial", false);
-    // page = preferences.getUChar("page", 0);
+    page = preferences.getUChar("page", 0) % PAGES;
     dark = preferences.getBool("dark", true);
 
     // Setup M5Dial
@@ -286,15 +294,15 @@ void loop()
         switch (page)
         {
         case (PAGE_INDICATORS):
-            M5Dial.Display.setTextSize(6);
-            if (value & B1)
-                M5Dial.Display.drawString("<", 120, 60);
-            else if (value & B10)
-                M5Dial.Display.drawString("<<", 120, 60);
-            if (value & B100)
-                M5Dial.Display.drawString(">", 120, 60);
-            else if (value & B1000)
-                M5Dial.Display.drawString(">>", 120, 60);
+            M5Dial.Display.setTextSize(4);
+            if (value & 1)
+                M5Dial.Display.drawString(" < ", 120, 120);
+            else if (value & 2)
+                M5Dial.Display.drawString("<<", 120, 120);
+            if (value & 4)
+                M5Dial.Display.drawString(" > ", 120, 120);
+            else if (value & 8)
+                M5Dial.Display.drawString(">>", 120, 120);
             break;
         default: // Standard Metrics
             M5Dial.Display.setTextSize(4);
