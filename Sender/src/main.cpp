@@ -159,13 +159,13 @@ void loop()
         Serial.print(d1_ready);
         Serial.print(" ");
         Serial.println(d2_ready);
-        if (d1_ready & can_rx.MsgID == d1_id & millis() > d1_time)
+        if (d1_ready & can_rx.MsgID == d1_id) // millis() > d1_time
         {
             d1_ready = false;
             d1_time = millis() + RATELIMIT;
             esp_now_send(d1_address, (u8_t *)&can_rx.data.u8, can_rx.FIR.B.DLC);
         }
-        if (d2_ready & can_rx.MsgID == d2_id & millis() > d2_time)
+        if (d2_ready & can_rx.MsgID == d2_id) // millis() > d2_time
         {
             d2_ready = false;
             d2_time = millis() + RATELIMIT;
