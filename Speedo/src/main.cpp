@@ -262,20 +262,20 @@ void loop()
     auto t = M5Dial.Touch.getDetail();
     switch (t.state)
     {
-    case (2): // Tap End
+    case 2: // Tap End
         t.x > 120 ? changePage(1) : changePage(-1);
         drawPage();
         break;
-    case (6): // Hold End
+    case 6: // Hold End
         dark = !dark;
         M5Dial.Display.invertDisplay(dark);
         preferences.putBool("dark", dark);
         break;
-    case (10): // Flick End
+    case 10: // Flick End
         t.x > 120 ? changePage(1) : changePage(-1);
         drawPage();
         break;
-    case (14): // Drag End
+    case 14: // Drag End
         t.x > 120 ? changePage(1) : changePage(-1);
         drawPage();
         break;
@@ -294,14 +294,30 @@ void loop()
         {
         case (PAGE_INDICATORS):
             M5Dial.Display.setTextSize(4);
-            if (value & 1)
-                M5Dial.Display.drawString(" < ", 120, 120);
-            else if (value & 2)
-                M5Dial.Display.drawString("<<", 120, 120);
-            if (value & 4)
-                M5Dial.Display.drawString(" > ", 120, 120);
-            else if (value & 8)
-                M5Dial.Display.drawString(">>", 120, 120);
+            switch (value)
+            {
+            case 0:
+                M5Dial.Display.drawString("        ", 120, 120);
+                break;
+            case 5: // Harzards Low
+                M5Dial.Display.drawString("   ><   ", 120, 120);
+                break;
+            case 10: // Hazards High
+                M5Dial.Display.drawString(">><<", 120, 120);
+                break;
+            case 1: // Left Low
+                M5Dial.Display.drawString("  <", 90, 120);
+                break;
+            case 2: // Left High
+                M5Dial.Display.drawString("<<", 90, 120);
+                break;
+            case 4: // Right Low
+                M5Dial.Display.drawString(">  ", 150, 120);
+                break;
+            case 8: // Right High
+                M5Dial.Display.drawString(">>", 150, 120);
+                break;
+            }
             break;
         default: // Standard Metrics
             M5Dial.Display.setTextSize(4);
