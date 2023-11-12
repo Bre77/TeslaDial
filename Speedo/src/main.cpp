@@ -141,7 +141,7 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
 const u16_t id_time = 1320;
 const u16_t id_speed = 599;
 const u16_t id_hvac_request = 755;
-const u16_5 id_front_power = 741;
+const u16_t id_front_power = 741;
 const u16_t id_front_torque = 469;
 const u16_t id_rear_power = 614;
 const u16_t id_rear_torque = 472;
