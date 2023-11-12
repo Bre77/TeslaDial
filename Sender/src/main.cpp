@@ -178,7 +178,7 @@ void loop()
             // d1_time = millis() + RATELIMIT;
             esp_now_send(d1_address, (u8_t *)&can_rx.data.u8, can_rx.FIR.B.DLC);
         }
-        if (d2_ready & can_rx.MsgID == d2_id & (can_rx.data.u8[0] & d2_multi_mask == d2_multi_id) // millis() > d2_time
+        if (d2_ready & can_rx.MsgID == d2_id & (can_rx.data.u8[0] & d2_multi_mask == d2_multi_id)) // millis() > d2_time
         {
             d2_ready = false;
             // d2_time = millis() + RATELIMIT;
