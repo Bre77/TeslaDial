@@ -32,10 +32,10 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
 #define PAGES 11
 
 #define PAGE_SPEED 0
-#define PAGE_FRONT_TORQUE 1
-#define PAGE_FRONT_MOTOR 2
-#define PAGE_REAR_TORQUE 3
-#define PAGE_REAR_MOTOR 4
+#define PAGE_FRONT_POWER 1
+#define PAGE_FRONT_AMPS 2
+#define PAGE_REAR_POWER 3
+#define PAGE_REAR_AMPS 4
 #define PAGE_HV_BATTERY_VOLTAGE 5
 #define PAGE_HV_BATTERY_CURRENT 6
 #define PAGE_INDICATORS 7
@@ -45,6 +45,8 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
 
 #define PAGE_AC_LEFT 101
 #define PAGE_AC_RIGHT 102
+#define PAGE_FRONT_TORQUE 103
+#define PAGE_REAR_TORQUE 105
 
 // Receive data
 void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
@@ -77,9 +79,17 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
         value = (data[1] & 31) * 5 + 150;
         decimal = true;
         break;
+    case PAGE_FRONT_POWER: // 0|11@1- (0.5,0) [-512|511.5]
+        value = (data[0] | data[1] & B11 << 8) * (data[1] & 4 ? -5 : 5);
+        decimal = true;
+        break;
     case PAGE_FRONT_TORQUE: // 21|13@1- (0.222,0) [-909.312|909.09] "NM"  Receiver
         // value = (data[1] + (data[2] & B00001111 << 8)) * 2.22; //+ (data[3] & B00000000 << 8)
         value = (data[2] >> 5 | data[3] << 3 | data[4] & 1 << 11) * (data[4] & 2) ? 2.22 : -2.22;
+        decimal = true;
+        break;
+    case PAGE_REAR_POWER: // 0|11@1- (0.5,0) [-512|511.5]
+        value = (data[0] | data[1] & B11 << 8) * (data[1] & 4 ? -5 : 5);
         decimal = true;
         break;
     case PAGE_REAR_TORQUE: // 21|13@1- (0.222,0) [-909.312|909.09] "NM"  Receiver
@@ -87,11 +97,11 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
         value = (data[2] >> 5 | data[3] << 3 | data[4] & 1 << 11) * (data[4] & 2) ? 2.22 : -2.22;
         decimal = true;
         break;
-    case PAGE_FRONT_MOTOR: // 11|11@1+ (1,0) [0|2047]
+    case PAGE_FRONT_AMPS: // 11|11@1+ (1,0) [0|2047]
         value = (data[1] >> 5 | data[2] << 3) * 10;
         decimal = false;
         break;
-    case PAGE_REAR_MOTOR: // 11|11@1+ (1,0) [0|2047]
+    case PAGE_REAR_AMPS: // 11|11@1+ (1,0) [0|2047]
         value = (data[1] >> 5 | data[2] << 3) * 10;
         decimal = false;
         break;
@@ -131,15 +141,17 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
 const u16_t id_time = 1320;
 const u16_t id_speed = 599;
 const u16_t id_hvac_request = 755;
+const u16_5 id_front_power = 741;
 const u16_t id_front_torque = 469;
+const u16_t id_rear_power = 614;
 const u16_t id_rear_torque = 472;
 const u16_t id_hv_battery = 306;
 const u16_t id_lights = 1013;
 const u16_t id_hvac_status[2] = {579, 3 << 8};
 const u16_t id_ths = 899;
 const u16_t id_front_sensor = 801;
-const u16_t id_front_motor = 421;
-const u16_t id_rear_motor = 294;
+const u16_t id_front_amps = 421;
+const u16_t id_rear_amps = 294;
 
 void drawPage()
 {
@@ -163,6 +175,16 @@ void drawPage()
         M5Dial.Display.drawString("   AC Right   ", 120, 50);
         M5Dial.Display.drawString("  Celsius  ", 120, 180);
         break;
+    case PAGE_FRONT_POWER:
+        esp_now_send(senderAddress, (u8_t *)&id_front_power, 2);
+        M5Dial.Display.drawString("   Front Power   ", 120, 50);
+        M5Dial.Display.drawString("   kW   ", 120, 180);
+        break;
+    case PAGE_REAR_POWER:
+        esp_now_send(senderAddress, (u8_t *)&id_rear_power, 2);
+        M5Dial.Display.drawString("   Rear Power   ", 120, 50);
+        M5Dial.Display.drawString("   kW   ", 120, 180);
+        break;
     case PAGE_FRONT_TORQUE:
         esp_now_send(senderAddress, (u8_t *)&id_front_torque, 2);
         M5Dial.Display.drawString("   Front Torque   ", 120, 50);
@@ -173,13 +195,13 @@ void drawPage()
         M5Dial.Display.drawString("   Rear Torque   ", 120, 50);
         M5Dial.Display.drawString("    Nm    ", 120, 180);
         break;
-    case PAGE_FRONT_MOTOR:
-        esp_now_send(senderAddress, (u8_t *)&id_front_motor, 2);
+    case PAGE_FRONT_AMPS:
+        esp_now_send(senderAddress, (u8_t *)&id_front_amps, 2);
         M5Dial.Display.drawString("   Front Motor   ", 120, 50);
         M5Dial.Display.drawString("   Amps   ", 120, 180);
         break;
-    case PAGE_REAR_MOTOR:
-        esp_now_send(senderAddress, (u8_t *)&id_rear_motor, 2);
+    case PAGE_REAR_AMPS:
+        esp_now_send(senderAddress, (u8_t *)&id_rear_amps, 2);
         M5Dial.Display.drawString("   Rear Motor   ", 120, 50);
         M5Dial.Display.drawString("   Amps   ", 120, 180);
         break;
