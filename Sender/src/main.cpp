@@ -16,9 +16,12 @@ const uint8_t d2_address[6] = {0x48, 0x27, 0xE2, 0xE3, 0xAA, 0xEC};
 const byte d1_check = 0x20; // Last byte of MAC Address
 const byte d2_check = 0xEC; // Last byte of MAC Address
 
-u16_t d1_id, d2_id;                    // Requested Message IDs
-u8_t d1_data[8], d2_data[8];           // Data to send
-u8_t d1_length, d2_length;             // Data length
+#define RATELIMIT 49
+long d1_time, d2_time;             // Last sent time
+u16_t d1_id, d2_id;                // Requested Message IDs
+u8_t d1_multi_id, d2_multi_id;     // Multiplex ID
+u8_t d1_multi_mask, d2_multi_mask; // Multiplex Mask
+
 bool d1_ready = true, d2_ready = true; // Ready to send
 bool restart_can = false;              // Restart CAN Bus
 
@@ -62,14 +65,32 @@ void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len)
         p_filter.ACR0 = d1_id >> 3;
         p_filter.ACR1 = d1_id << 5;
         restart_can = true;
-        Serial.println(d1_id);
+        if (data_len == 4)
+        {
+            d1_multi_id = data[2];
+            d1_multi_mask = data[3];
+        }
+        else
+        {
+            d1_multi_id = 0;
+            d1_multi_mask = 0;
+        }
         break;
     case d2_check:
         d2_id = data[0] + (data[1] << 8);
         p_filter.ACR2 = d2_id >> 3;
         p_filter.ACR3 = d2_id << 5;
         restart_can = true;
-        Serial.println(d2_id);
+        if (data_len == 4)
+        {
+            d2_multi_id = data[2];
+            d2_multi_mask = data[3];
+        }
+        else
+        {
+            d2_multi_id = 0;
+            d2_multi_mask = 0;
+        }
         break;
     }
 }
@@ -137,9 +158,6 @@ void setup()
     led(CRGB::Green);
 }
 
-#define RATELIMIT 199
-long d1_time, d2_time;
-
 void loop()
 {
     if (restart_can)
@@ -154,21 +172,16 @@ void loop()
     }
     if (xQueueReceive(CAN_cfg.rx_queue, &can_rx, 3 * portTICK_PERIOD_MS) == pdTRUE)
     {
-        Serial.print(can_rx.MsgID);
-        Serial.print(" ");
-        Serial.print(d1_ready);
-        Serial.print(" ");
-        Serial.println(d2_ready);
-        if (d1_ready & can_rx.MsgID == d1_id) // millis() > d1_time
+        if (d1_ready & can_rx.MsgID == d1_id & (can_rx.data.u8[0] & d1_multi_mask == d1_multi_id)) // millis() > d1_time
         {
             d1_ready = false;
-            d1_time = millis() + RATELIMIT;
+            // d1_time = millis() + RATELIMIT;
             esp_now_send(d1_address, (u8_t *)&can_rx.data.u8, can_rx.FIR.B.DLC);
         }
-        if (d2_ready & can_rx.MsgID == d2_id) // millis() > d2_time
+        if (d2_ready & can_rx.MsgID == d2_id & (can_rx.data.u8[0] & d2_multi_mask == d2_multi_id) // millis() > d2_time
         {
             d2_ready = false;
-            d2_time = millis() + RATELIMIT;
+            // d2_time = millis() + RATELIMIT;
             esp_now_send(d2_address, (u8_t *)&can_rx.data.u8, can_rx.FIR.B.DLC);
         }
     }
