@@ -66,6 +66,8 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
      |7654____|____3210|
      */
 
+    // Signed numbers are two's complement
+
     switch (page)
     {
     case PAGE_SPEED: // 12|12@1+
