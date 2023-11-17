@@ -5,6 +5,8 @@
 #include <esp_now.h>
 #include <Preferences.h>
 
+M5Canvas graph(&M5Dial.Display);
+
 Preferences preferences;
 
 u8_t senderAddress[] = {0xD4, 0xD4, 0xDA, 0x9D, 0xFD, 0xE4};
@@ -14,7 +16,13 @@ bool render = false;
 int32_t oldPosition = 0;
 int32_t value = INT32_MAX;
 int32_t old_value = INT32_MAX;
-unsigned long next_time = 0;
+int32_t high_value = 1000;
+int32_t low_value = 0;
+int32_t sum_value = 0;
+int32_t sum_count = 0;
+
+unsigned long next_value = ULONG_MAX;
+unsigned long next_graph = ULONG_MAX;
 uint8_t page = 0;
 bool dark = true;
 bool decimal = true;
@@ -29,7 +37,10 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
     }
 }
 
-#define PAGES 13
+#define GRAPH_HEIGHT 70
+#define GRAPH_SPAN 60000 / 240
+
+#define PAGES 15
 
 #define PAGE_SPEED 0
 #define PAGE_HV_BATTERY_POWER 1
@@ -44,17 +55,19 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
 #define PAGE_CABIN_TEMP 10
 #define PAGE_ACTUAL_TEMP 11
 #define PAGE_OUTSIDE_TEMP 12
+#define PAGE_TIME 13
+#define PAGE_TEST 14
 
-#define PAGE_INDICATORS 13
+#define PAGE_INDICATORS 103
 #define PAGE_AC_LEFT 101
 #define PAGE_AC_RIGHT 102
 
 // Receive data
 void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
 {
-    if (millis() < next_time)
+    /*if (millis() < next_value)
         return; // Rate Limit
-    next_time = millis() + 99;
+    next_value = millis() + 99;*/
     old_value = value;
 
     /* 0|16
@@ -137,8 +150,17 @@ void OnDataRecv(const u8_t *mac, const u8_t *data, int len)
         value = data[3] * 5 - 400;
         decimal = true;
         break;
+    case PAGE_TIME: // 7|32@0+ (1,0) [0|4294970000]
+        value = (data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3]);
+        // value = ((u32_t)data + 36000) % 86400;
+        decimal = false;
+        break;
+    case PAGE_TEST:
+        value = (s16_t)(value++);
+        render = value != old_value;
     }
-    render = value != old_value;
+    sum_value += value;
+    sum_count++;
 
     // This is for debugging only
     // M5Dial.Display.setTextSize(0.5);
@@ -164,79 +186,90 @@ const u16_t id_rear_amps = 294;
 
 void drawPage()
 {
+    M5Dial.Display.startWrite();
     M5Dial.Display.clear();
-    // M5Dial.Display.drawString("100.0", 120, 125, &FreeSansBold24pt7b);
+    graph.clear();
     M5Dial.Display.setTextSize(1);
     switch (page)
     {
     case PAGE_SPEED:
         esp_now_send(senderAddress, (u8_t *)&id_speed, 2);
         M5Dial.Display.drawString("Speed", 120, 50);
-        M5Dial.Display.drawString("KM/H", 120, 180);
+        high_value = 1200;
+        low_value = 0;
+        // M5Dial.Display.drawString("KM/H", 120, 180);
         break;
     case PAGE_AC_LEFT:
         esp_now_send(senderAddress, (u8_t *)&id_hvac_request, 2);
         M5Dial.Display.drawString("AC Left", 120, 50);
-        M5Dial.Display.drawString("Celsius", 120, 180);
+        // M5Dial.Display.drawString("Celsius", 120, 180);
+        high_value = 300;
+        low_value = 150;
         break;
     case PAGE_AC_RIGHT:
         esp_now_send(senderAddress, (u8_t *)&id_hvac_request, 2);
         M5Dial.Display.drawString("AC Right", 120, 50);
-        M5Dial.Display.drawString("Celsius", 120, 180);
+        // M5Dial.Display.drawString("Celsius", 120, 180);
+        high_value = 300;
+        low_value = 150;
         break;
     case PAGE_FRONT_POWER:
         esp_now_send(senderAddress, (u8_t *)&id_front_power, 2);
         M5Dial.Display.drawString("Front", 120, 20);
         M5Dial.Display.drawString("Power", 120, 50);
-        M5Dial.Display.drawString("kW", 120, 180);
+        // M5Dial.Display.drawString("kW", 120, 180);
+        high_value = 5000;
+        low_value = -5000;
         break;
     case PAGE_REAR_POWER:
         esp_now_send(senderAddress, (u8_t *)&id_rear_power, 2);
         M5Dial.Display.drawString("Rear", 120, 20);
         M5Dial.Display.drawString("Power", 120, 50);
-        M5Dial.Display.drawString("kW", 120, 180);
+        // M5Dial.Display.drawString("kW", 120, 180);
         break;
     case PAGE_FRONT_TORQUE:
         esp_now_send(senderAddress, (u8_t *)&id_front_torque, 2);
         M5Dial.Display.drawString("Front", 120, 20);
         M5Dial.Display.drawString("Torque", 120, 50);
-        M5Dial.Display.drawString("Nm", 120, 180);
+        // M5Dial.Display.drawString("Nm", 120, 180);
         break;
     case PAGE_REAR_TORQUE:
         esp_now_send(senderAddress, (u8_t *)&id_rear_torque, 2);
         M5Dial.Display.drawString("Rear", 120, 20);
         M5Dial.Display.drawString("Torque", 120, 50);
-        M5Dial.Display.drawString("Nm", 120, 180);
+        // M5Dial.Display.drawString("Nm", 120, 180);
         break;
     case PAGE_FRONT_AMPS:
         esp_now_send(senderAddress, (u8_t *)&id_front_amps, 2);
         M5Dial.Display.drawString("Front", 120, 20);
         M5Dial.Display.drawString("Motor", 120, 50);
-        M5Dial.Display.drawString("Amps", 120, 180);
+        // M5Dial.Display.drawString("Amps", 120, 180);
         break;
     case PAGE_REAR_AMPS:
         esp_now_send(senderAddress, (u8_t *)&id_rear_amps, 2);
         M5Dial.Display.drawString("Rear", 120, 20);
         M5Dial.Display.drawString("Motor", 120, 50);
-        M5Dial.Display.drawString("Amps", 120, 180);
+        // M5Dial.Display.drawString("Amps", 120, 180);
         break;
     case PAGE_HV_BATTERY_POWER:
         esp_now_send(senderAddress, (u8_t *)&id_hv_battery, 2);
         M5Dial.Display.drawString("HV", 120, 20);
         M5Dial.Display.drawString("Power", 120, 50);
-        M5Dial.Display.drawString("kW", 120, 180);
+        // M5Dial.Display.drawString("kW", 120, 180);
         break;
     case PAGE_HV_BATTERY_VOLTAGE:
         esp_now_send(senderAddress, (u8_t *)&id_hv_battery, 2);
         M5Dial.Display.drawString("HV", 120, 20);
         M5Dial.Display.drawString("Voltage", 120, 50);
-        M5Dial.Display.drawString("Volts", 120, 180);
+        // M5Dial.Display.drawString("Volts", 120, 180);
         break;
     case PAGE_HV_BATTERY_CURRENT:
         esp_now_send(senderAddress, (u8_t *)&id_hv_battery, 2);
         M5Dial.Display.drawString("HV", 120, 20);
         M5Dial.Display.drawString("Current", 120, 50);
-        M5Dial.Display.drawString("Amps", 120, 180);
+        // M5Dial.Display.drawString("Amps", 120, 180);
+        high_value = 10000;
+        low_value = -10000;
         break;
     case PAGE_INDICATORS:
         esp_now_send(senderAddress, (u8_t *)&id_lights, 2);
@@ -246,24 +279,41 @@ void drawPage()
         esp_now_send(senderAddress, (u8_t *)&id_hvac_status, 4);
         M5Dial.Display.drawString("Cabin", 120, 50);
         M5Dial.Display.drawString("Temp", 120, 20);
-        M5Dial.Display.drawString("Celsius", 120, 180);
+        // M5Dial.Display.drawString("Celsius", 120, 180);
+        high_value = 380;
+        low_value = 0;
         break;
     case PAGE_ACTUAL_TEMP:
         esp_now_send(senderAddress, (u8_t *)&id_ths, 2);
         M5Dial.Display.drawString("Inside", 120, 50);
         M5Dial.Display.drawString("Temp", 120, 20);
-        M5Dial.Display.drawString("Celsius", 120, 180);
+        // M5Dial.Display.drawString("Celsius", 120, 180);
+        high_value = 380;
+        low_value = 0;
         break;
     case PAGE_OUTSIDE_TEMP:
         esp_now_send(senderAddress, (u8_t *)&id_front_sensor, 2);
-
         M5Dial.Display.drawString("Outside", 120, 50);
         M5Dial.Display.drawString("Temp", 120, 20);
-        M5Dial.Display.drawString("Celsius", 120, 180);
+        // M5Dial.Display.drawString("Celsius", 120, 180);
+        high_value = 380;
+        low_value = 0;
+        break;
+    case PAGE_TIME:
+        esp_now_send(senderAddress, (u8_t *)&id_time, 2);
+        M5Dial.Display.drawString("Time", 120, 50);
+        break;
+    case PAGE_TEST:
+        esp_now_send(senderAddress, (u8_t *)&id_time, 2);
+        M5Dial.Display.drawString("Test", 120, 50);
         break;
     }
+    M5Dial.Display.endWrite();
     value = INT16_MAX;
-    next_time = 0;
+    sum_value = 0;
+    sum_count = 0;
+    next_value = 0;
+    next_graph = 0;
     render = false;
 }
 
@@ -285,6 +335,8 @@ void setup()
     M5Dial.Display.setTextDatum(middle_center);
     M5Dial.Display.setFont(&Orbitron_Light_24); // FreeSansBold12pt7b
     M5Dial.Display.invertDisplay(dark);
+    graph.createSprite(240, GRAPH_HEIGHT);
+    graph.fillSprite(TFT_PINK);
 
     // Start ESP Now
     if (esp_now_init() != ESP_OK)
@@ -360,49 +412,82 @@ void loop()
         drawPage();
         oldPosition = newPosition;
     }
-    if (render)
+
+    switch (page)
     {
-        switch (page)
-        {
-        case (PAGE_INDICATORS):
-            M5Dial.Display.setTextSize(2);
-            switch (value)
-            {
-            case 0:
-                M5Dial.Display.drawString("        ", 120, 125, &Orbitron_Light_32);
-                break;
-            case 5: // Harzards Low
-                M5Dial.Display.drawString("   ><   ", 120, 125, &Orbitron_Light_32);
-                break;
-            case 10: // Hazards High
-                M5Dial.Display.drawString(">><<", 120, 125, &Orbitron_Light_32);
-                break;
-            case 1: // Left Low
-                M5Dial.Display.drawString("  <", 90, 125, &Orbitron_Light_32);
-                break;
-            case 2: // Left High
-                M5Dial.Display.drawString("<<", 90, 125, &Orbitron_Light_32);
-                break;
-            case 4: // Right Low
-                M5Dial.Display.drawString(">  ", 150, 125, &Orbitron_Light_32);
-                break;
-            case 8: // Right High
-                M5Dial.Display.drawString(">>", 150, 125, &Orbitron_Light_32);
-                break;
-            }
+    case (PAGE_INDICATORS):
+        if (!render)
             break;
-        default: // Standard Metrics
+        M5Dial.Display.setTextSize(2);
+        switch (value)
+        {
+        case 0:
+            M5Dial.Display.drawString("        ", 120, 120, &Orbitron_Light_32);
+            break;
+        case 5: // Harzards Low
+            M5Dial.Display.drawString("   ><   ", 120, 120, &Orbitron_Light_32);
+            break;
+        case 10: // Hazards High
+            M5Dial.Display.drawString(">><<", 120, 120, &Orbitron_Light_32);
+            break;
+        case 1: // Left Low
+            M5Dial.Display.drawString("  <", 90, 120, &Orbitron_Light_32);
+            break;
+        case 2: // Left High
+            M5Dial.Display.drawString("<<", 90, 120, &Orbitron_Light_32);
+            break;
+        case 4: // Right Low
+            M5Dial.Display.drawString(">  ", 150, 120, &Orbitron_Light_32);
+            break;
+        case 8: // Right High
+            M5Dial.Display.drawString(">>", 150, 120, &Orbitron_Light_32);
+            break;
+        }
+        break;
+    case (PAGE_TIME):
+    {
+        if (!render)
+            break;
+        u8_t hours = (value / 3600 + 10) % 24;
+        u8_t mins = (value / 60) % 60;
+        u8_t secs = value % 60;
+        M5Dial.Display.startWrite();
+        M5Dial.Display.setTextSize(2);
+        mins > 10 ? M5Dial.Display.drawString(String(hours) + ":" + String(mins), 120, 120, &FreeSansBold24pt7b)
+                  : M5Dial.Display.drawString(String(hours) + ":0" + String(mins), 120, 120, &FreeSansBold24pt7b);
+        M5Dial.Display.setTextSize(1);
+        secs > 10 ? M5Dial.Display.drawString(String(secs), 120, 190, &FreeSansBold24pt7b)
+                  : M5Dial.Display.drawString("0" + String(hours), 120, 190, &FreeSansBold24pt7b);
+        M5Dial.Display.endWrite();
+        break;
+    }
+    default: // Standard Metrics
+
+        if (render)
+        {
+            render = false;
             M5Dial.Display.setTextSize(2);
             if (decimal && (value < 2000) && (value > -1000))
             {
-                M5Dial.Display.drawString("  " + String(value / 10) + "." + String(abs(value) % 10) + "  ", 120, 125, &FreeSansBold24pt7b);
+                M5Dial.Display.drawString("  " + String(value / 10) + "." + String(abs(value) % 10) + "  ", 120, 120, &FreeSansBold24pt7b);
             }
             else
             {
-                M5Dial.Display.drawString("    " + String(value / 10) + "    ", 120, 125, &FreeSansBold24pt7b);
+                M5Dial.Display.drawString("    " + String(value / 10) + "    ", 120, 120, &FreeSansBold24pt7b);
             }
-            break;
         }
-        render = false;
+
+        if (millis() >= next_graph)
+        {
+
+            next_graph = millis() + GRAPH_SPAN;
+            graph.scroll(-1, 0);
+            u8_t position = map(abs(sum_value / sum_count), max(0, low_value), max(abs(low_value), high_value), 0, GRAPH_HEIGHT);
+            graph.writeFastVLine(239, position, GRAPH_HEIGHT, low_value < 0 ? (value < 0 ? TFT_GREEN : TFT_RED) : TFT_BLUE);
+            M5Dial.Display.startWrite();
+            graph.pushSprite(0, 240 - GRAPH_HEIGHT);
+            M5Dial.Display.endWrite();
+        }
+        break;
     }
 }
