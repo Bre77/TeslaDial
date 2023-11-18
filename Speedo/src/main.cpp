@@ -497,7 +497,7 @@ void loop()
             }
         }
 
-        if (millis() >= next_graph && value != INT16_MAX)
+        if ((millis() >= next_graph) && (value != INT16_MAX))
         {
             next_graph = millis() + GRAPH_SPAN;
             int graph_value = sum_count > 0 ? sum_value / sum_count : value;
