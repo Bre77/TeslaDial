@@ -505,10 +505,9 @@ void loop()
             sum_value = 0;
             u8_t y = map(abs(graph_value), max(0, low_value), max(abs(low_value), high_value), 0, GRAPH_HEIGHT);
             graph.scroll(-1, 0);
-            graph.writeFastVLine(239, GRAPH_HEIGHT - y, y, low_value < 0 ? (graph_value < 0 ? TFT_GREEN : TFT_RED) : TFT_BLUE);
+            graph.writeFastVLine(GRAPH_WIDTH - 1, GRAPH_HEIGHT - y, y, low_value < 0 ? (graph_value < 0 ? TFT_GREEN : TFT_RED) : TFT_BLUE);
             M5Dial.Display.startWrite();
             graph.pushSprite(GRAPH_OFFSET, 240 - GRAPH_HEIGHT);
-            // M5Dial.Display.drawNumber(y, 160, 200, &Font0);
             M5Dial.Display.endWrite();
         }
         break;
