@@ -24,6 +24,9 @@ int32_t sum_count = 0;
 unsigned long next_value = ULONG_MAX;
 unsigned long next_graph = ULONG_MAX;
 uint8_t page = 0;
+uint8_t brightness = 255;
+static const uint8_t brightness_step = 16;
+static const uint8_t brightness_min = 1;
 bool dark = true;
 bool decimal = true;
 
@@ -41,25 +44,26 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
 #define GRAPH_WIDTH 220
 #define GRAPH_OFFSET 10
 #define GRAPH_SPAN 15 * 1000 / 240
+#define BRIGHTNESS_STEP = 16
 
-#define PAGES 15
+#define PAGES 6
 
-#define PAGE_SPEED 0
-#define PAGE_HV_BATTERY_POWER 1
-#define PAGE_HV_BATTERY_VOLTAGE 2
-#define PAGE_HV_BATTERY_CURRENT 3
+#define PAGE_TIME 0
+#define PAGE_SPEED 1
+#define PAGE_HV_BATTERY_POWER 2
+#define PAGE_HV_BATTERY_VOLTAGE 3
+#define PAGE_HV_BATTERY_CURRENT 203
 #define PAGE_REAR_TORQUE 4
 #define PAGE_REAR_POWER 5
-#define PAGE_REAR_AMPS 6
-#define PAGE_FRONT_TORQUE 7
-#define PAGE_FRONT_POWER 8
-#define PAGE_FRONT_AMPS 9
-#define PAGE_CABIN_TEMP 10
-#define PAGE_ACTUAL_TEMP 11
-#define PAGE_OUTSIDE_TEMP 12
-#define PAGE_TIME 13
-#define PAGE_TEST 14
+#define PAGE_REAR_AMPS 206
+#define PAGE_FRONT_TORQUE 6
+#define PAGE_FRONT_POWER 7
+#define PAGE_FRONT_AMPS 209
+#define PAGE_CABIN_TEMP 210
+#define PAGE_ACTUAL_TEMP 211
+#define PAGE_OUTSIDE_TEMP 212
 
+#define PAGE_TEST 214
 #define PAGE_INDICATORS 103
 #define PAGE_AC_LEFT 101
 #define PAGE_AC_RIGHT 102
@@ -192,7 +196,6 @@ void drawPage()
 {
     M5Dial.Display.startWrite();
     M5Dial.Display.clear();
-    graph.clear();
     M5Dial.Display.setTextSize(1);
     switch (page)
     {
@@ -337,6 +340,22 @@ void drawPage()
     render = false;
 }
 
+void applyColor()
+{
+    if (dark)
+    {
+        M5Dial.Display.clear(TFT_BLACK);
+        M5Dial.Display.setTextColor(TFT_WHITE, TFT_BLACK);
+        // graph.clear(TFT_BLACK);
+    }
+    else
+    {
+        M5Dial.Display.clear(TFT_WHITE);
+        M5Dial.Display.setTextColor(TFT_BLACK, TFT_WHITE);
+        // graph.clear(TFT_WHITE);
+    }
+}
+
 void setup()
 {
     // Setup WiFi for ESP Now
@@ -346,6 +365,7 @@ void setup()
     preferences.begin("dial", false);
     page = preferences.getUChar("page", 0) % PAGES;
     dark = preferences.getBool("dark", true);
+    brightness = preferences.getUChar("brightness", 255);
 
     // Setup M5Dial
     auto cfg = M5.config();
@@ -354,9 +374,9 @@ void setup()
     M5Dial.Display.setRotation(3);
     M5Dial.Display.setTextDatum(middle_center);
     M5Dial.Display.setFont(&Orbitron_Light_24); // FreeSansBold12pt7b
-    M5Dial.Display.invertDisplay(dark);
+    // M5Dial.Display.invertDisplay(dark);
+    M5Dial.Display.setBrightness(brightness);
     graph.createSprite(GRAPH_WIDTH, GRAPH_HEIGHT);
-    graph.fillSprite(TFT_PINK);
 
     // Start ESP Now
     if (esp_now_init() != ESP_OK)
@@ -380,6 +400,8 @@ void setup()
         ESP.restart();
     }
 
+    applyColor();
+
     u16_t count = 0;
     while (!render)
     {
@@ -391,6 +413,7 @@ void setup()
     }
 
     // Draw the page
+
     drawPage();
 }
 
@@ -398,31 +421,52 @@ void changePage(s8_t change)
 {
     page = (PAGES + page + change) % PAGES;
     preferences.putUChar("page", page);
+    graph.clear();
+}
+
+void changeBrightness(bool up)
+{
+
+    brightness = up ? (brightness << 1) + 1 : brightness >> 1;
+    M5Dial.Display.setBrightness(brightness);
 }
 
 void loop()
 {
     M5Dial.update();
     auto t = M5Dial.Touch.getDetail();
-    switch (t.state)
+    if (t.state == 6)
     {
-    case 2: // Tap End
-        t.x > 120 ? changePage(1) : changePage(-1);
-        drawPage();
-        break;
-    case 6: // Hold End
         dark = !dark;
-        M5Dial.Display.invertDisplay(dark);
-        preferences.putBool("dark", dark);
-        break;
-    case 10: // Flick End
-        t.x > 120 ? changePage(1) : changePage(-1);
+        applyColor();
         drawPage();
-        break;
-    case 14: // Drag End
-        t.x > 120 ? changePage(1) : changePage(-1);
-        drawPage();
-        break;
+    }
+    else if (t.state % 4 == 2)
+    {
+        s8_t x = t.x - 120;
+        s8_t y = t.y - 120;
+        if (x <= -abs(y))
+        {
+            // LEFT
+            changePage(-1);
+            drawPage();
+        }
+        else if (x > abs(y))
+        {
+            // RIGHT
+            changePage(1);
+            drawPage();
+        }
+        else if (y <= -abs(x))
+        {
+            // UP
+            changeBrightness(true);
+        }
+        else if (y > abs(x))
+        {
+            // DOWN
+            changeBrightness(false);
+        }
     }
     u16_t newPosition = M5Dial.Encoder.read() / 4;
     s8_t change = newPosition - oldPosition;
@@ -507,7 +551,8 @@ void loop()
             graph.scroll(-1, 0);
             graph.writeFastVLine(GRAPH_WIDTH - 1, GRAPH_HEIGHT - y, y, low_value < 0 ? (graph_value < 0 ? TFT_GREEN : TFT_RED) : TFT_BLUE);
             M5Dial.Display.startWrite();
-            graph.pushSprite(GRAPH_OFFSET, 240 - GRAPH_HEIGHT);
+            graph.pushSprite(GRAPH_OFFSET, 239 - GRAPH_HEIGHT, TFT_BLACK);
+            // M5Dial.Display.drawNumber(y, 160, 200, &Font0);
             M5Dial.Display.endWrite();
         }
         break;
