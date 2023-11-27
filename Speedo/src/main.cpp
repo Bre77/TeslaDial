@@ -551,6 +551,8 @@ void loop()
             graph.scroll(-1, 0);
             graph.writeFastVLine(GRAPH_WIDTH - 1, GRAPH_HEIGHT - y, y, low_value < 0 ? (graph_value < 0 ? TFT_GREEN : TFT_RED) : TFT_BLUE);
             M5Dial.Display.startWrite();
+            // Fill graph area to clear previous graph
+            M5Dial.Display.fillRect(GRAPH_OFFSET, 239 - GRAPH_HEIGHT, GRAPH_WIDTH, GRAPH_HEIGHT, dark ? TFT_BLACK : TFT_WHITE);
             graph.pushSprite(GRAPH_OFFSET, 239 - GRAPH_HEIGHT, TFT_BLACK);
             // M5Dial.Display.drawNumber(y, 160, 200, &Font0);
             M5Dial.Display.endWrite();
