@@ -428,6 +428,7 @@ void changeBrightness(bool up)
 
     brightness = up ? (brightness << 1) + 1 : brightness >> 1;
     M5Dial.Display.setBrightness(brightness);
+    preferences.putUChar("brightness", brightness);
 }
 
 void loop()
@@ -439,6 +440,7 @@ void loop()
         dark = !dark;
         applyColor();
         drawPage();
+        preferences.putBool("dark", dark);
     }
     else if (t.state % 4 == 2)
     {
@@ -551,7 +553,7 @@ void loop()
             graph.writeFastVLine(GRAPH_WIDTH - 1, GRAPH_HEIGHT - y, y, low_value < 0 ? (graph_value < 0 ? TFT_GREEN : TFT_RED) : TFT_BLUE);
             M5Dial.Display.startWrite();
             // Fill graph area to clear previous graph
-            graph.pushSprite(GRAPH_OFFSET, 239 - GRAPH_HEIGHT);
+            graph.pushSprite(GRAPH_OFFSET, 240 - GRAPH_HEIGHT);
             // M5Dial.Display.drawNumber(y, 160, 200, &Font0);
             M5Dial.Display.endWrite();
         }
