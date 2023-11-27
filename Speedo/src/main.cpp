@@ -24,9 +24,7 @@ int32_t sum_count = 0;
 unsigned long next_value = ULONG_MAX;
 unsigned long next_graph = ULONG_MAX;
 uint8_t page = 0;
-uint8_t brightness = 255;
-static const uint8_t brightness_step = 16;
-static const uint8_t brightness_min = 1;
+uint8_t brightness = UINT8_MAX;
 bool dark = true;
 bool decimal = true;
 
@@ -44,9 +42,8 @@ void ExtractValue(u8_t start, u8_t length, u8_t *data)
 #define GRAPH_WIDTH 220
 #define GRAPH_OFFSET 10
 #define GRAPH_SPAN 15 * 1000 / 240
-#define BRIGHTNESS_STEP = 16
 
-#define PAGES 6
+#define PAGES 8
 
 #define PAGE_TIME 0
 #define PAGE_SPEED 1
